@@ -203,9 +203,9 @@ def detection_thread():
                 weapon_found = False
                 weapon_conf = 0.0
 
-                # 2. Run Knife Detection using standard COCO model (class 43: knife)
+                # 2. Run Knife / Blade Detection using standard COCO model (class 43: knife, class 76: scissors)
                 try:
-                    knife_results = model.predict(frame_copy, imgsz=320, conf=0.40, classes=[43], verbose=False)
+                    knife_results = model.predict(frame_copy, imgsz=320, conf=0.35, classes=[43, 76], verbose=False)
                     k_boxes = knife_results[0].boxes
                     if len(k_boxes) > 0:
                         weapon_found = True
@@ -213,18 +213,20 @@ def detection_thread():
                         for k_box in k_boxes:
                             kx1, ky1, kx2, ky2 = map(int, k_box.xyxy[0])
                             kconf = float(k_box.conf[0]) * 100
+                            cls_id = int(k_box.cls[0])
+                            k_name = "SCISSORS" if cls_id == 76 else "KNIFE"
                             cv2.rectangle(frame_copy, (kx1, ky1), (kx2, ky2), (0, 0, 255), 3) # Bright Red
-                            klabel = f"⚠️ KNIFE {kconf:.1f}%"
+                            klabel = f"⚠️ {k_name} {kconf:.1f}%"
                             (kw, kh), _ = cv2.getTextSize(klabel, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
                             cv2.rectangle(frame_copy, (kx1, ky1 - 22), (kx1 + kw + 6, ky1), (0, 0, 255), -1)
                             cv2.putText(frame_copy, klabel, (kx1 + 3, ky1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                 except Exception:
                     pass
 
-                # 3. Run Gun / Firearm Detection using fine-tuned model (strict conf >= 0.60 to prevent false positives)
+                # 3. Run Gun / Firearm Detection using fine-tuned model (conf >= 0.35 for responsive detection)
                 if weapon_model is not None:
                     try:
-                        w_results = weapon_model.predict(frame_copy, imgsz=320, conf=0.60, verbose=False)
+                        w_results = weapon_model.predict(frame_copy, imgsz=320, conf=0.35, verbose=False)
                         w_boxes = w_results[0].boxes
                         if len(w_boxes) > 0:
                             g_conf = float(max(b.conf[0] for b in w_boxes)) * 100
@@ -430,6 +432,8 @@ def on_message(client, userdata, msg):
     gps = sensor.get("gps", "0,0")
 
     intrusion = detection_state["humanDetected"]
+    weapon = detection_state.get("weaponDetected", False)
+    weapon_conf = detection_state.get("weaponConfidence", 0.0)
     cam_status = detection_state["cameraStatus"]
     detection_conf = detection_state["confidence"]
     box_count = detection_state["boxCount"]
@@ -444,14 +448,15 @@ def on_message(client, userdata, msg):
 
     # Danger Assessment Engine
     threat = 0
-    if intrusion: threat += 40
+    if intrusion: threat += 35
+    if weapon: threat += 55
     if tilt > 4: threat += 15
     if temp > 30: threat += 10
     if front < 50: threat += 20
     if side < 30: threat += 10
     if magnetic == 0: threat += 5
 
-    if threat > 60:
+    if threat > 60 or weapon:
         level = "HIGH"
     elif threat > 25:
         level = "ELEVATED"
@@ -460,7 +465,7 @@ def on_message(client, userdata, msg):
 
     if front < 30:
         move = "LEFT"
-    elif intrusion:
+    elif intrusion or weapon:
         move = "LEFT"
     elif tilt > 4:
         move = "RIGHT"
@@ -522,6 +527,8 @@ def on_message(client, userdata, msg):
         "humanDetected": intrusion,
         "detectionConfidence": detection_conf,
         "detectionCount": box_count,
+        "weaponDetected": weapon,
+        "weaponConfidence": weapon_conf,
         "cameraStatus": cam_status,
         "temperature": temp,
         "humidity": humidity,
@@ -548,6 +555,7 @@ def on_message(client, userdata, msg):
     print("\n---- SECURE TELEMETRY SHIPPED TO CRYPTO ENGINE ----")
     print("Camera Status  :", cam_status)
     print("Human Detected :", "YES" if intrusion else "NO")
+    print("Weapon Detected:", f"YES ({weapon_conf:.1f}%)" if weapon else "NO")
     print("Temperature    :", temp, "C")
     print("Humidity       :", humidity, "%")
     print("Tilt           :", tilt)
