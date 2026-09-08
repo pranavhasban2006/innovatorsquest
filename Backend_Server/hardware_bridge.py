@@ -11,7 +11,7 @@ platform.system = lambda: "Windows"
 platform.win32_ver = lambda *a, **k: ("10", "10.0.19041", "", "Multiprocessor Free")
 # -------------------------------
 
-import time, json, cv2, threading, requests, base64, ssl, queue, hashlib, secrets, random
+import time, json, cv2, threading, requests, base64, ssl, queue, hashlib, secrets, random, os
 import paho.mqtt.client as mqtt
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
@@ -19,14 +19,21 @@ from ultralytics import YOLO
 from flask import Flask, Response
 from flask_cors import CORS
 
-BROKER = "d4152fc4908b486d88b26fefd6dfa7ab.s1.eu.hivemq.cloud"
-PORT = 8883
-TOPIC = "drone/DRONE_01"
-USERNAME = "Drone123"
-PASSWORD = "Spectr@123"
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
-KEY = b"DRONE_SECURE_KEY"
-IV  = b"INITVECTOR123456"
+BROKER = os.environ.get("MQTT_BROKER", "d4152fc4908b486d88b26fefd6dfa7ab.s1.eu.hivemq.cloud")
+PORT = int(os.environ.get("MQTT_PORT", 8883))
+TOPIC = os.environ.get("MQTT_TOPIC", "drone/DRONE_01")
+USERNAME = os.environ.get("MQTT_USERNAME", os.environ.get("MQTT_USER", "Drone123"))
+PASSWORD = os.environ.get("MQTT_PASS", "Spectr@123")
+
+KEY = os.environ.get("AES_SECRET_KEY", "DRONE_SECURE_KEY").encode("utf-8")
+IV  = os.environ.get("AES_IV", "INITVECTOR123456").encode("utf-8")
+EXPRESS_API_URL = os.environ.get("EXPRESS_API_URL", "http://localhost:5000/api/data")
 
 # Blockchain Crypto Setup
 crypto_queue = queue.Queue()
@@ -76,7 +83,7 @@ def crypto_transmission_engine():
             if delay > 0:
                  time.sleep(delay)
                  
-            requests.post("http://localhost:5000/api/data", json=payload, timeout=2)
+            requests.post(EXPRESS_API_URL, json=payload, timeout=2)
         except Exception as e:
             pass
 
@@ -87,18 +94,30 @@ latest_frame = None
 camera_online = False
 cap = None
 
+CAMERA_URL_ENV = os.environ.get("CAMERA_URL", "http://192.168.137.27:8080/video")
+try:
+    video_source = int(CAMERA_URL_ENV)
+except ValueError:
+    video_source = CAMERA_URL_ENV
+
+detection_state = {
+    "humanDetected": False,
+    "confidence": 0.0,
+    "boxCount": 0,
+    "cameraStatus": "NOT CONNECTED"
+}
+
 def cam_thread():
     global latest_frame, camera_online, cap
-    print("[SYSTEM] Attempting concurrent connection to Drone IP Camera...", flush=True)
-    video_url = "http://192.168.137.27:8080/video"
-    cap = cv2.VideoCapture(video_url)
+    print(f"[SYSTEM] Attempting concurrent connection to Drone IP Camera ({video_source})...", flush=True)
+    cap = cv2.VideoCapture(video_source)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     
     while True:
         if not cap.isOpened():
             print("[SYSTEM] Camera disconnected. Reconnecting...", flush=True)
             cap.release()
-            cap = cv2.VideoCapture(video_url)
+            cap = cv2.VideoCapture(video_source)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             time.sleep(2)
             continue
@@ -124,10 +143,48 @@ try:
 except Exception as e:
     print(f"[SYSTEM] YOLO failed to load: {e}", flush=True)
 
+# Continuous AI Detection Thread
+display_frame = None
+def detection_thread():
+    global display_frame, detection_state
+    while True:
+        if camera_online and latest_frame is not None:
+            try:
+                results = model.predict(latest_frame, imgsz=320, conf=0.5, classes=[0], verbose=False)
+                display_frame = results[0].plot()
+                boxes = results[0].boxes
+                if len(boxes) > 0:
+                    max_conf = float(max(b.conf[0] for b in boxes))
+                    detection_state = {
+                        "humanDetected": True,
+                        "confidence": round(max_conf * 100, 1),
+                        "boxCount": len(boxes),
+                        "cameraStatus": "CONNECTED"
+                    }
+                else:
+                    detection_state = {
+                        "humanDetected": False,
+                        "confidence": 0.0,
+                        "boxCount": 0,
+                        "cameraStatus": "CONNECTED"
+                    }
+            except Exception as e:
+                detection_state["cameraStatus"] = "ERROR"
+        else:
+            detection_state = {
+                "humanDetected": False,
+                "confidence": 0.0,
+                "boxCount": 0,
+                "cameraStatus": "NOT CONNECTED"
+            }
+            display_frame = None
+        time.sleep(0.2) # ~5 FPS detection rate
+
+threading.Thread(target=detection_thread, daemon=True).start()
+
 # ---- FLASK VIDEO STREAMING SERVER ----
 app_flask = Flask(__name__)
 CORS(app_flask)
-display_frame = None
 
 def gen_frames():
     global display_frame
@@ -144,12 +201,62 @@ def gen_frames():
 def video_feed():
     return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@app_flask.route('/detection_status')
+def detection_status():
+    return detection_state
+
 @app_flask.route('/')
 def index():
     return {"status": "AI Hardware Bridge Server Ready"}
 
+from grid_map import GridMap
+from pathfinding import a_star
+
+@app_flask.route('/api/pathfind', methods=['POST'])
+def get_pathfind_route():
+    try:
+        from flask import request, jsonify
+        data = request.json or {}
+        start_lat = data.get("start", {}).get("lat", 34.09670)
+        start_lng = data.get("start", {}).get("lng", -118.19156)
+        goal_lat = data.get("goal", {}).get("lat", 34.09720)
+        goal_lng = data.get("goal", {}).get("lng", -118.19080)
+        
+        g_map = GridMap()
+        
+        # If intrusion is detected, mark hazard at threat position
+        threats = data.get("threats", [])
+        if detection_state.get("humanDetected") and "threat_lat" in data and "threat_lng" in data:
+            threats.append({"lat": data["threat_lat"], "lng": data["threat_lng"]})
+            
+        for t in threats:
+            g_map.mark_hazard(t["lat"], t["lng"], radius_cells=3, cost=100.0)
+            
+        start_cell = g_map.latlng_to_cell(start_lat, start_lng)
+        goal_cell = g_map.latlng_to_cell(goal_lat, goal_lng)
+        
+        path_cells, total_cost = a_star(g_map, start_cell, goal_cell)
+        
+        if not path_cells:
+            return jsonify({"status": "SUCCESS", "blocked": True, "path": [], "totalCost": None})
+            
+        path_segments = []
+        for r, c in path_cells:
+            lat, lng = g_map.cell_to_latlng(r, c)
+            cost = g_map.get_cost(r, c)
+            path_segments.append({"lat": lat, "lng": lng, "cost": cost})
+            
+        return jsonify({
+            "status": "SUCCESS",
+            "blocked": False,
+            "path": path_segments,
+            "totalCost": round(total_cost, 2)
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)}), 500
+
 def run_flask():
-    print("[SYSTEM] Flask Video Proxy starting on port 5001...", flush=True)
+    print("[SYSTEM] Flask Video Proxy & Pathfinding API starting on port 5001...", flush=True)
     app_flask.run(host='0.0.0.0', port=5001, debug=False, use_reloader=False)
 
 threading.Thread(target=run_flask, daemon=True).start()
@@ -192,22 +299,10 @@ def on_message(client, userdata, msg):
     side = float(sensor.get("sideDist", 150))
     gps = sensor.get("gps", "0,0")
 
-    intrusion = False
-    cam_status = "CONNECTED"
-
-    # Evaluate Video Feed via YOLO
-    global display_frame
-    if camera_online and latest_frame is not None:
-        try:
-            results = model.predict(latest_frame, imgsz=320, conf=0.5, classes=[0], verbose=False)
-            display_frame = results[0].plot() # Render the AI bounding boxes onto the frame directly
-            for r in results:
-                if len(r.boxes) > 0:
-                    intrusion = True
-        except:
-            pass
-    else:
-        cam_status = "NOT CONNECTED"
+    intrusion = detection_state["humanDetected"]
+    cam_status = detection_state["cameraStatus"]
+    detection_conf = detection_state["confidence"]
+    box_count = detection_state["boxCount"]
 
     # Obstacle mapping
     if front < 30:
@@ -255,6 +350,9 @@ def on_message(client, userdata, msg):
     payload = {
         "threatLevel": level,
         "humanDetected": intrusion,
+        "detectionConfidence": detection_conf,
+        "detectionCount": box_count,
+        "cameraStatus": cam_status,
         "temperature": temp,
         "humidity": humidity,
         "pitch": tilt,

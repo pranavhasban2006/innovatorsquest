@@ -1,4 +1,7 @@
-# Backend_Server/main.py
+# --- DEPRECATION NOTICE ---
+# NOTE: This legacy entry point (topic 'spectr/telemetry') is deprecated.
+# Active production hardware bridge is `hardware_bridge.py` (topic 'drone/DRONE_01').
+# --------------------------
 from mqtt_handler import start_mqtt_listener
 from logger import log_event
 

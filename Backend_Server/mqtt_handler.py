@@ -1,5 +1,7 @@
-# Backend_Server/mqtt_handler.py
-
+# --- DEPRECATION NOTICE ---
+# NOTE: This legacy MQTT handler (listening on 'spectr/telemetry') is deprecated.
+# Active production hardware bridge is `hardware_bridge.py` (listening on 'drone/DRONE_01').
+# --------------------------
 import paho.mqtt.client as mqtt
 import ssl
 import json

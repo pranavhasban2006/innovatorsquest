@@ -1,5 +1,7 @@
-# Backend_Server/config.py
-
+# --- DEPRECATION NOTICE ---
+# NOTE: This legacy configuration file is deprecated.
+# Active configuration for `hardware_bridge.py` reads directly from environment variables / .env.
+# --------------------------
 BROKER = "your-hivemq-url"
 PORT = 8883
 TOPIC = "spectr/telemetry"

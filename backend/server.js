@@ -37,6 +37,9 @@ const SensorDataSchema = new mongoose.Schema({
   speed: { type: Number },
   heading: { type: Number },
   threatScore: { type: Number, min: 0, max: 100 },
+  detectionConfidence: { type: Number },
+  detectionCount: { type: Number },
+  cameraStatus: { type: String },
   blockchain_hash: { type: String },
   salt: { type: String },
   security_level: { type: String }
@@ -241,19 +244,30 @@ app.post("/api/data", async (req, res) => {
   
   try {
     const entry = new SensorData(data);
-    entry.save().catch(e => {}); // Silent ignore DB offline
+    entry.save().catch(e => console.warn('[MongoDB Save Warning]:', e.message));
     
     // 💾 Physical File Logging for Live Demonstration
     const fs = require('fs');
     const path = require('path');
-    const logFilePath = path.join(__dirname, '..', 'Logs', 'spectr_blockchain_ledger.txt');
+    const logDir = path.join(__dirname, '..', 'Logs');
+    const logFilePath = path.join(logDir, 'spectr_blockchain_ledger.txt');
     
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+
     const logLine = `[${new Date().toLocaleString()}] LVL: ${data.security_level || 'SAFE'} | HASH: ${data.blockchain_hash} | SCORE: ${data.threatScore}\n`;
     fs.appendFile(logFilePath, logLine, (err) => {
-        if (err) console.log("Failed to write physical log file:", err);
+        if (err) console.error("[Ledger Write Error]:", err.message);
     });
     
-  } catch (e) { }
+  } catch (e) { 
+    console.error("[Telemetry Post Handling Error]:", e.message);
+  }
+});
+
+app.get("/api/breach/status", (req, res) => {
+   res.json({ active: breachData.active });
 });
 
 app.post("/api/breach/approve", async (req, res) => {
