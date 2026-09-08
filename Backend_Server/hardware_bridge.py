@@ -99,7 +99,7 @@ latest_frame = None
 camera_online = False
 cap = None
 
-CAMERA_URL_ENV = os.environ.get("CAMERA_URL", "http://192.168.137.42/stream")
+CAMERA_URL_ENV = os.environ.get("CAMERA_URL", "http://192.168.137.115/stream")
 video_source = CAMERA_URL_ENV
 
 detection_state = {
@@ -115,7 +115,7 @@ import numpy as np
 
 def cam_thread():
     global latest_frame, camera_online
-    target = "http://192.168.137.42/stream"
+    target = os.environ.get("CAMERA_URL", "http://192.168.137.115/stream")
     print(f"[SYSTEM] 🎯 Connecting to ESP32 Stream: {target}", flush=True)
 
     while True:
