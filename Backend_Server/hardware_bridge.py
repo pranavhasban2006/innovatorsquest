@@ -25,7 +25,7 @@ try:
 except ImportError:
     pass
 
-BROKER = os.environ.get("MQTT_BROKER", "d4152fc4908b486d88b26fefd6dfa7ab.s1.eu.hivemq.cloud")
+BROKER = os.environ.get("MQTT_BROKER", "afc6727442064c98b65753a9cae78163.s1.eu.hivemq.cloud")
 PORT = int(os.environ.get("MQTT_PORT", 8883))
 TOPIC = os.environ.get("MQTT_TOPIC", "drone/DRONE_01")
 USERNAME = os.environ.get("MQTT_USERNAME", os.environ.get("MQTT_USER", "Drone123"))
@@ -94,80 +94,162 @@ latest_frame = None
 camera_online = False
 cap = None
 
-CAMERA_URL_ENV = os.environ.get("CAMERA_URL", "http://192.168.137.27:8080/video")
-try:
-    video_source = int(CAMERA_URL_ENV)
-except ValueError:
-    video_source = CAMERA_URL_ENV
+CAMERA_URL_ENV = os.environ.get("CAMERA_URL", "http://192.168.137.42/stream")
+video_source = CAMERA_URL_ENV
 
 detection_state = {
     "humanDetected": False,
     "confidence": 0.0,
     "boxCount": 0,
+    "weaponDetected": False,
+    "weaponConfidence": 0.0,
     "cameraStatus": "NOT CONNECTED"
 }
 
+import numpy as np
+
 def cam_thread():
-    global latest_frame, camera_online, cap
-    print(f"[SYSTEM] Attempting concurrent connection to Drone IP Camera ({video_source})...", flush=True)
-    cap = cv2.VideoCapture(video_source)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-    
+    global latest_frame, camera_online
+    target = "http://192.168.137.42/stream"
+    print(f"[SYSTEM] 🎯 Connecting to ESP32 Stream: {target}", flush=True)
+
     while True:
-        if not cap.isOpened():
-            print("[SYSTEM] Camera disconnected. Reconnecting...", flush=True)
-            cap.release()
-            cap = cv2.VideoCapture(video_source)
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            time.sleep(2)
-            continue
-            
-        ret, frame = cap.read()
-        if ret:
-            latest_frame = frame
-            camera_online = True
-        else:
+        try:
+            r = requests.get(target, stream=True, timeout=5)
+            if r.status_code == 200:
+                print(f"[SYSTEM] ✅ Connected to ESP32 Camera at {target}!", flush=True)
+                bytes_buf = b""
+                for chunk in r.iter_content(chunk_size=8192):
+                    if not chunk:
+                        continue
+                    bytes_buf += chunk
+                    soi = bytes_buf.find(b'\xff\xd8')
+                    eoi = bytes_buf.rfind(b'\xff\xd9')
+                    if soi != -1 and eoi != -1 and eoi > soi:
+                        jpg = bytes_buf[soi:eoi+2]
+                        bytes_buf = bytes_buf[eoi+2:]
+                        frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
+                        if frame is not None and frame.shape[0] > 0:
+                            latest_frame = frame
+                            camera_online = True
+            else:
+                camera_online = False
+                time.sleep(1)
+        except Exception as e:
             camera_online = False
-            print("[SYSTEM] Camera frame dropped. Reconnecting...", flush=True)
-            cap.release() # Force reconnect on next iteration
+            print(f"[SYSTEM ⚠️] ESP32 Stream reconnecting ({e}). Ensure no browser tab is directly open to {target}.", flush=True)
             time.sleep(1)
 
 threading.Thread(target=cam_thread, daemon=True).start()
 
-print("[SYSTEM] Importing YOLO Model... (This may take a moment to load)", flush=True)
+print("[SYSTEM] Importing YOLO Models (Human & Weapon Detection)...", flush=True)
 import warnings
 warnings.filterwarnings("ignore")
 try:
     model = YOLO("yolov8n.pt")
-    print("[SYSTEM] YOLO Model loaded successfully!", flush=True)
+    print("[SYSTEM] Standard YOLO Human Detection Model loaded successfully!", flush=True)
 except Exception as e:
-    print(f"[SYSTEM] YOLO failed to load: {e}", flush=True)
+    print(f"[SYSTEM] Standard YOLO failed to load: {e}", flush=True)
+
+weapon_model = None
+if os.path.exists("yolov8_weapon.pt"):
+    try:
+        weapon_model = YOLO("yolov8_weapon.pt")
+        print("[SYSTEM] ✅ Fine-Tuned SPECTR Weapon Detection Model (yolov8_weapon.pt) loaded!", flush=True)
+    except Exception as e:
+        print(f"[SYSTEM] Could not load yolov8_weapon.pt: {e}", flush=True)
 
 # Continuous AI Detection Thread
 display_frame = None
+detection_state = {
+    "humanDetected": False,
+    "confidence": 0.0,
+    "boxCount": 0,
+    "weaponDetected": False,
+    "weaponConfidence": 0.0,
+    "cameraStatus": "NOT CONNECTED"
+}
+
 def detection_thread():
     global display_frame, detection_state
     while True:
         if camera_online and latest_frame is not None:
             try:
-                results = model.predict(latest_frame, imgsz=320, conf=0.5, classes=[0], verbose=False)
-                display_frame = results[0].plot()
+                frame_copy = latest_frame.copy()
+
+                # 1. Run Human Detection (COCO class 0: person)
+                results = model.predict(frame_copy, imgsz=320, conf=0.45, classes=[0], verbose=False)
                 boxes = results[0].boxes
-                if len(boxes) > 0:
-                    max_conf = float(max(b.conf[0] for b in boxes))
-                    detection_state = {
-                        "humanDetected": True,
-                        "confidence": round(max_conf * 100, 1),
-                        "boxCount": len(boxes),
-                        "cameraStatus": "CONNECTED"
-                    }
-                else:
-                    detection_state = {
-                        "humanDetected": False,
-                        "confidence": 0.0,
-                        "boxCount": 0,
-                        "cameraStatus": "CONNECTED"
-                    }
+                
+                human_found = len(boxes) > 0
+                max_conf = float(max(b.conf[0] for b in boxes)) if human_found else 0.0
+
+                # Draw Cyan bounding boxes for Humans
+                if human_found:
+                    for box in boxes:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        conf = float(box.conf[0]) * 100
+                        cv2.rectangle(frame_copy, (x1, y1), (x2, y2), (255, 200, 0), 2) # Cyan/Blue
+                        label = f"HUMAN {conf:.1f}%"
+                        (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                        cv2.rectangle(frame_copy, (x1, y1 - 20), (x1 + w + 6, y1), (255, 200, 0), -1)
+                        cv2.putText(frame_copy, label, (x1 + 3, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+
+                weapon_found = False
+                weapon_conf = 0.0
+
+                # 2. Run Knife Detection using standard COCO model (class 43: knife)
+                try:
+                    knife_results = model.predict(frame_copy, imgsz=320, conf=0.40, classes=[43], verbose=False)
+                    k_boxes = knife_results[0].boxes
+                    if len(k_boxes) > 0:
+                        weapon_found = True
+                        weapon_conf = float(max(b.conf[0] for b in k_boxes)) * 100
+                        for k_box in k_boxes:
+                            kx1, ky1, kx2, ky2 = map(int, k_box.xyxy[0])
+                            kconf = float(k_box.conf[0]) * 100
+                            cv2.rectangle(frame_copy, (kx1, ky1), (kx2, ky2), (0, 0, 255), 3) # Bright Red
+                            klabel = f"⚠️ KNIFE {kconf:.1f}%"
+                            (kw, kh), _ = cv2.getTextSize(klabel, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
+                            cv2.rectangle(frame_copy, (kx1, ky1 - 22), (kx1 + kw + 6, ky1), (0, 0, 255), -1)
+                            cv2.putText(frame_copy, klabel, (kx1 + 3, ky1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                except Exception:
+                    pass
+
+                # 3. Run Gun / Firearm Detection using fine-tuned model (strict conf >= 0.60 to prevent false positives)
+                if weapon_model is not None:
+                    try:
+                        w_results = weapon_model.predict(frame_copy, imgsz=320, conf=0.60, verbose=False)
+                        w_boxes = w_results[0].boxes
+                        if len(w_boxes) > 0:
+                            g_conf = float(max(b.conf[0] for b in w_boxes)) * 100
+                            weapon_found = True
+                            weapon_conf = max(weapon_conf, g_conf)
+                            
+                            for w_box in w_boxes:
+                                wx1, wy1, wx2, wy2 = map(int, w_box.xyxy[0])
+                                wconf = float(w_box.conf[0]) * 100
+                                cls_id = int(w_box.cls[0])
+                                cls_name = weapon_model.names.get(cls_id, "GUN").upper()
+                                
+                                cv2.rectangle(frame_copy, (wx1, wy1), (wx2, wy2), (0, 0, 255), 3) # Bright Red
+                                wlabel = f"⚠️ {cls_name} {wconf:.1f}%"
+                                (ww, wh), _ = cv2.getTextSize(wlabel, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
+                                cv2.rectangle(frame_copy, (wx1, wy1 - 22), (wx1 + ww + 6, wy1), (0, 0, 255), -1)
+                                cv2.putText(frame_copy, wlabel, (wx1 + 3, wy1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                    except Exception:
+                        pass
+
+                display_frame = frame_copy
+
+                detection_state = {
+                    "humanDetected": human_found,
+                    "confidence": round(max_conf * 100, 1),
+                    "boxCount": len(boxes),
+                    "weaponDetected": weapon_found,
+                    "weaponConfidence": round(weapon_conf, 1),
+                    "cameraStatus": "CONNECTED"
+                }
             except Exception as e:
                 detection_state["cameraStatus"] = "ERROR"
         else:
@@ -175,7 +257,9 @@ def detection_thread():
                 "humanDetected": False,
                 "confidence": 0.0,
                 "boxCount": 0,
-                "cameraStatus": "NOT CONNECTED"
+                "weaponDetected": False,
+                "weaponConfidence": 0.0,
+                "cameraStatus": "CONNECTED"
             }
             display_frame = None
         time.sleep(0.2) # ~5 FPS detection rate
@@ -186,16 +270,56 @@ threading.Thread(target=detection_thread, daemon=True).start()
 app_flask = Flask(__name__)
 CORS(app_flask)
 
+def generate_standby_frame(frame_count):
+    img = np.zeros((360, 640, 3), dtype=np.uint8)
+    img[:] = (18, 26, 36) # Tactical dark slate
+
+    # Grid background lines
+    for x in range(0, 640, 40):
+        cv2.line(img, (x, 0), (x, 360), (32, 45, 60), 1)
+    for y in range(0, 360, 40):
+        cv2.line(img, (0, y), (640, y), (32, 45, 60), 1)
+
+    # Animated radar sweep line
+    angle = (frame_count * 6) % 360
+    rad = np.radians(angle)
+    center = (320, 180)
+    sweep_x = int(center[0] + 110 * np.cos(rad))
+    sweep_y = int(center[1] + 110 * np.sin(rad))
+
+    # Tactical HUD Crosshair
+    cv2.circle(img, center, 110, (0, 180, 240), 1)
+    cv2.circle(img, center, 65, (0, 210, 255), 1)
+    cv2.circle(img, center, 15, (0, 210, 255), 1)
+    cv2.line(img, (center[0] - 130, center[1]), (center[0] + 130, center[1]), (0, 180, 240), 1)
+    cv2.line(img, (center[0], center[1] - 130), (center[0], center[1] + 130), (0, 180, 240), 1)
+    cv2.line(img, center, (sweep_x, sweep_y), (0, 240, 255), 2)
+
+    # HUD Text Overlay
+    cv2.putText(img, "SPECTR AI OPTICAL STREAM // CAM-01", (20, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 240, 255), 2)
+    cv2.putText(img, "TACTICAL STANDBY STREAM // AIRSPACE MONITORING", (20, 335), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 220, 200), 1)
+
+    ts = time.strftime("%H:%M:%S")
+    cv2.putText(img, f"UTC {ts}", (520, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 240, 255), 1)
+
+    return img
+
 def gen_frames():
     global display_frame
+    frame_counter = 0
     while True:
+        frame_counter += 1
         if display_frame is not None:
-            ret, buffer = cv2.imencode('.jpg', display_frame)
+            frame_to_send = display_frame
+        else:
+            frame_to_send = generate_standby_frame(frame_counter)
+
+        ret, buffer = cv2.imencode('.jpg', frame_to_send)
+        if ret:
             frame_bytes = buffer.tobytes()
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        else:
-            time.sleep(0.1)
+        time.sleep(0.06)
 
 @app_flask.route('/video_feed')
 def video_feed():
@@ -396,8 +520,12 @@ client.tls_set(cert_reqs=ssl.CERT_NONE)
 client.on_message = on_message
 
 print("Connecting to HiveMQ Hardware Broker...")
-client.connect(BROKER, PORT)
-client.subscribe(TOPIC)
-
-print("AI Hardware Bridge Server Ready — RUNNING YOLOv8")
-client.loop_forever()
+try:
+    client.connect(BROKER, PORT)
+    client.subscribe(TOPIC)
+    print("AI Hardware Bridge Server Ready — RUNNING YOLOv8")
+    client.loop_forever()
+except Exception as e:
+    print(f"[SYSTEM WARNING] MQTT Broker connection error: {e}. Keeping Flask Video Proxy on Port 5001 ACTIVE.", flush=True)
+    while True:
+        time.sleep(1)

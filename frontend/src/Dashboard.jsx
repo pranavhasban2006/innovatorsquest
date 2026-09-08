@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { ThreatLevel } from './ThreatLevel';
 import HumanDetection from './HumanDetection';
+import WeaponDetection from './WeaponDetection';
 import ThreatGraph from './ThreatGraph';
 import GPSMap from './GPSMap';
 import { 
   ShieldAlert, Activity, Thermometer, Compass, Navigation, Radar, 
-  AlertTriangle, ShieldCheck, Database, Radio
+  AlertTriangle, ShieldCheck, Database, Radio, Crosshair
 } from 'lucide-react';
 
 export default function Dashboard({ sensorData, threatHistory, alerts, connected }) {
@@ -18,6 +19,8 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
 
   const sd = sensorData || {};
   const human = sd.humanDetected || false;
+  const weapon = sd.weaponDetected || false;
+  const weaponConf = sd.weaponConfidence || 0;
   const cameraStatus = sd.cameraStatus || "NOT CONNECTED";
   const detectionConfidence = sd.detectionConfidence || 0;
   const detectionCount = sd.detectionCount || 0;
@@ -35,31 +38,32 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
   const lng = sd.longitude || -118.19156;
   const speed = sd.speed || 3.8;
   const heading = sd.heading || 52;
-  const threatScore = sd.threatScore || 86;
+  const threatScore = weapon ? Math.max(sd.threatScore || 92, 90) : (sd.threatScore || 86);
   const secLevel = sd.security_level || "GHOST";
   const bHash = sd.blockchain_hash ? sd.blockchain_hash.substring(0, 18) + '...' : "0x7F9A...SYS_OK";
 
-  const isBreach = threatScore > 65 || human;
+  const isBreach = threatScore > 65 || human || weapon;
   const isElevated = threatScore > 35 && !isBreach;
 
   return (
     <div className={`min-h-screen max-w-480 mx-auto p-3 lg:p-4 flex flex-col gap-3 tactical-grid-bg text-slate-900 relative transition-all duration-500 ${isBreach ? 'breach-alert-perimeter' : ''}`}>
       
       {/* Background State Glow Tint */}
-      {isBreach && (
+      {weapon ? (
+        <div className="fixed inset-0 bg-red-600/10 pointer-events-none z-0 transition-opacity duration-500 animate-pulse" />
+      ) : isBreach ? (
         <div className="fixed inset-0 bg-red-500/5 pointer-events-none z-0 transition-opacity duration-500" />
-      )}
-      {isElevated && (
+      ) : isElevated ? (
         <div className="fixed inset-0 bg-amber-500/5 pointer-events-none z-0 transition-opacity duration-500" />
-      )}
+      ) : null}
 
       {/* ======================= DAYLIGHT CONTROL HEADER ======================= */}
-      <header className={`tactical-panel ${isBreach ? 'tactical-corner-danger border-red-500 bg-red-50/40' : isElevated ? 'tactical-corner-amber border-amber-500 bg-amber-50/30' : 'tactical-corner border-[#CBD5E1] bg-white'} p-3 lg:px-5 flex flex-col md:flex-row justify-between items-center gap-3 z-10`}>
+      <header className={`tactical-panel ${weapon ? 'tactical-corner-danger border-red-700 bg-red-100/80 animate-pulse' : isBreach ? 'tactical-corner-danger border-red-500 bg-red-50/40' : isElevated ? 'tactical-corner-amber border-amber-500 bg-amber-50/30' : 'tactical-corner border-[#CBD5E1] bg-white'} p-3 lg:px-5 flex flex-col md:flex-row justify-between items-center gap-3 z-10`}>
         
         {/* Title & Terminal ID */}
         <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-start">
           <div className="flex items-center gap-3">
-            <div className={`p-2 border ${isBreach ? 'border-red-500 bg-red-100 text-red-700' : isElevated ? 'border-amber-500 bg-amber-100 text-amber-800' : 'border-sky-500 bg-sky-50 text-sky-700'} flex items-center justify-center`}>
+            <div className={`p-2 border ${weapon ? 'border-red-700 bg-red-600 text-white animate-bounce' : isBreach ? 'border-red-500 bg-red-100 text-red-700' : isElevated ? 'border-amber-500 bg-amber-100 text-amber-800' : 'border-sky-500 bg-sky-50 text-sky-700'} flex items-center justify-center`}>
               <ShieldAlert size={22} className={isBreach ? "animate-pulse" : ""} />
             </div>
             <div>
@@ -78,7 +82,11 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
 
         {/* Center Threat State Banner */}
         <div className="flex items-center justify-center">
-          {isBreach ? (
+          {weapon ? (
+            <div className="flex items-center gap-2 border border-red-700 bg-red-700 text-white px-4 py-1.5 text-xs font-['Rajdhani'] font-bold tracking-[0.2em] animate-bounce shadow-md">
+              <Crosshair size={16} className="animate-spin" /> [!] WEAPON DETECTED // CRITICAL BREACH ESCALATION ({threatScore}%)
+            </div>
+          ) : isBreach ? (
             <div className="flex items-center gap-2 border border-red-600 bg-red-600 text-white px-4 py-1.5 text-xs font-['Rajdhani'] font-bold tracking-[0.2em] animate-pulse shadow-sm">
               <AlertTriangle size={16} /> CRITICAL BREACH ALERT // THREAT {threatScore}%
             </div>
@@ -222,13 +230,24 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
         
         {/* Hero Camera Feed (2 cols) */}
         <div className="xl:col-span-2 h-95 md:h-115 tactical-panel border-[#CBD5E1] relative overflow-hidden flex flex-col bg-white">
-          <CamView humanDetected={human} connected={connected} cameraStatus={cameraStatus} confidence={detectionConfidence} />
+          <CamView 
+            humanDetected={human} 
+            weaponDetected={weapon} 
+            weaponConfidence={weaponConf}
+            connected={connected} 
+            cameraStatus={cameraStatus} 
+            confidence={detectionConfidence} 
+          />
         </div>
 
-        {/* Threat Level Gauge & AI Human Vision (1 col) */}
+        {/* Threat Level Gauge & AI Human / Weapon Vision (1 col) */}
         <div className="xl:col-span-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-3">
           <ThreatLevel level={threatScore > 65 ? 2 : threatScore > 35 ? 1 : 0} score={threatScore} connected={connected} />
-          <HumanDetection detected={human} connected={connected} cameraStatus={cameraStatus} confidence={detectionConfidence} boxCount={detectionCount} />
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-3">
+            <HumanDetection detected={human} connected={connected} cameraStatus={cameraStatus} confidence={detectionConfidence} boxCount={detectionCount} />
+            <WeaponDetection detected={weapon} connected={connected} cameraStatus={cameraStatus} confidence={weaponConf} />
+          </div>
         </div>
 
       </div>
@@ -280,11 +299,13 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
                   <span className="px-1.5 py-0.2 text-[9px] font-bold text-emerald-800 border border-emerald-300 bg-emerald-50">NOMINAL</span>
                   <span className="text-slate-800 font-medium">FLIR camera stream synced on CAM-01</span>
                 </div>
-                <div className="flex items-center gap-2.5 px-2.5 py-1 border border-slate-200 bg-slate-50 text-slate-800">
-                  <span className="text-slate-500">{time.toLocaleTimeString()}</span>
-                  <span className="px-1.5 py-0.2 text-[9px] font-bold text-amber-800 border border-amber-300 bg-amber-50">WARN</span>
-                  <span className="text-slate-800 font-medium">Proximity radar scan: Clear (150cm)</span>
-                </div>
+                {weapon && (
+                  <div className="flex items-center gap-2.5 px-2.5 py-1 border border-red-600 bg-red-100 text-red-900 animate-bounce font-bold">
+                    <span className="text-slate-600">{time.toLocaleTimeString()}</span>
+                    <span className="px-1.5 py-0.2 text-[9px] font-bold text-white bg-red-700 border border-red-800">ARMED BREACH</span>
+                    <span className="text-red-900 font-bold">CRITICAL: Weapon detected in target camera frame!</span>
+                  </div>
+                )}
                 {human && (
                   <div className="flex items-center gap-2.5 px-2.5 py-1 border border-red-400 bg-red-50 text-red-800 animate-pulse font-bold">
                     <span className="text-slate-600">{time.toLocaleTimeString()}</span>
@@ -331,7 +352,7 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
   );
 }
 
-function CamView({ humanDetected, connected, cameraStatus, confidence }) {
+function CamView({ humanDetected, weaponDetected, weaponConfidence, connected, cameraStatus, confidence }) {
   const [streamError, setStreamError] = useState(false);
   const videoUrl = import.meta.env.VITE_VIDEO_URL || "http://localhost:5001/video_feed";
 
@@ -353,6 +374,16 @@ function CamView({ humanDetected, connected, cameraStatus, confidence }) {
         </span>
       </div>
 
+      {/* Flashing WEAPON DETECTED HUD Badge */}
+      {weaponDetected && (
+        <div className="absolute top-12 left-3 z-20 flex items-center gap-2 bg-red-700 text-white px-3 py-1 border border-red-800 shadow-md animate-bounce">
+          <AlertTriangle size={14} className="animate-pulse" />
+          <span className="text-[10px] font-['Share_Tech_Mono'] tracking-wider font-bold uppercase">
+            WEAPON DETECTED ({weaponConfidence > 0 ? `${weaponConfidence}%` : 'ARMED TARGET'})
+          </span>
+        </div>
+      )}
+
       {/* Top Right HUD Telemetry */}
       <div className="absolute top-3 right-3 z-20 text-[10px] font-['Share_Tech_Mono'] text-sky-900 bg-white/90 backdrop-blur-md px-2.5 py-1 border border-slate-300 shadow-sm tracking-wider font-bold">
         ZOOM: 2.4X | FOV: 110° | IR: ACTIVE
@@ -360,9 +391,9 @@ function CamView({ humanDetected, connected, cameraStatus, confidence }) {
 
       {/* High Contrast Optical Reticle HUD */}
       <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center">
-        <div className={`w-35 h-35 border ${humanDetected ? 'border-red-600 shadow-[0_0_20px_rgba(220,38,38,0.5)]' : 'border-sky-400/80'} rounded-full flex items-center justify-center transition-all duration-300`}>
+        <div className={`w-35 h-35 border ${weaponDetected ? 'border-red-700 shadow-[0_0_30px_rgba(220,38,38,0.8)]' : humanDetected ? 'border-red-600 shadow-[0_0_20px_rgba(220,38,38,0.5)]' : 'border-sky-400/80'} rounded-full flex items-center justify-center transition-all duration-300`}>
           
-          <div className={`w-2 h-2 ${humanDetected ? 'bg-red-600 shadow-[0_0_10px_#dc2626]' : 'bg-sky-500'} rounded-full`} />
+          <div className={`w-2 h-2 ${weaponDetected || humanDetected ? 'bg-red-600 shadow-[0_0_10px_#dc2626]' : 'bg-sky-500'} rounded-full`} />
           
           <div className="absolute -top-4 w-px h-4 bg-sky-400" />
           <div className="absolute -bottom-4 w-px h-4 bg-sky-400" />
@@ -394,7 +425,7 @@ function CamView({ humanDetected, connected, cameraStatus, confidence }) {
               <div className="h-full w-px bg-sky-300 absolute" />
               <div className="w-full h-full rounded-full border-t-2 border-sky-600 animate-radar-sweep origin-center" />
               
-              {humanDetected && (
+              {(humanDetected || weaponDetected) && (
                 <div className="absolute top-12 right-14 w-3 h-3 bg-red-600 rounded-full shadow-[0_0_15px_#dc2626] animate-pulse" />
               )}
             </div>
@@ -407,17 +438,20 @@ function CamView({ humanDetected, connected, cameraStatus, confidence }) {
           </div>
         )}
 
-        {/* Target Acquisition Bounding Frame */}
-        {humanDetected && (
-          <div className="absolute inset-10 border-2 border-red-600 bg-red-500/15 animate-pulse pointer-events-none flex flex-col justify-between p-2">
-            <div className="flex justify-between items-start text-[10px] font-['Share_Tech_Mono'] font-bold text-white bg-red-600 px-2 py-0.5 border border-red-700 w-fit">
-              [!] TARGET LOCKED // INTRUDER
+        {/* Clean subtle HUD overlay badges */}
+        <div className="absolute bottom-3 left-3 z-20 flex gap-2">
+          {weaponDetected && (
+            <div className="text-[10px] font-['Share_Tech_Mono'] font-bold text-white bg-red-700/90 backdrop-blur-md px-2.5 py-1 border border-red-800 shadow-sm flex items-center gap-1.5 animate-pulse">
+              <AlertTriangle size={12} />
+              <span>WEAPON DETECTED ({weaponConfidence > 0 ? `${weaponConfidence}%` : 'ARMED'})</span>
             </div>
-            <div className="text-right text-[9px] font-['Share_Tech_Mono'] text-white bg-red-600 px-2 py-0.5 border border-red-700 w-fit ml-auto">
-              CONFIDENCE: {confidence > 0 ? `${confidence}%` : '94.8%'}
+          )}
+          {humanDetected && !weaponDetected && (
+            <div className="text-[10px] font-['Share_Tech_Mono'] font-bold text-white bg-amber-600/90 backdrop-blur-md px-2.5 py-1 border border-amber-700 shadow-sm flex items-center gap-1.5">
+              <span>HUMAN TRACKED ({confidence > 0 ? `${confidence}%` : 'ACTIVE'})</span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Disconnected State Overlay */}

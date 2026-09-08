@@ -11,7 +11,7 @@ from integrity_checker import verify_integrity
 from logger import log_event
 from kill_switch import trigger_kill_switch
 
-BROKER = "d4152fc4908b486d88b26fefd6dfa7ab.s1.eu.hivemq.cloud"
+BROKER = "afc6727442064c98b65753a9cae78163.s1.eu.hivemq.cloud"
 PORT = 8883
 TOPIC = "spectr/telemetry"
 

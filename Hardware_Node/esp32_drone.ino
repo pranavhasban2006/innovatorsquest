@@ -1,4 +1,4 @@
-#define MQTT_MAX_PACKET_SIZE 512 // 🔥 VERY IMPORTANT
+#define MQTT_MAX_PACKET_SIZE 512 
 
 #include "mbedtls/aes.h"
 #include "mbedtls/base64.h"
@@ -11,11 +11,11 @@
 #include <math.h>
 
 // WIFI
-const char *ssid = "Drone2";
+const char *ssid = "Drone1";
 const char *password = "12345678";
 
 // MQTT
-const char *mqtt_server = "d4152fc4908b486d88b26fefd6dfa7ab.s1.eu.hivemq.cloud";
+const char *mqtt_server = "afc6727442064c98b65753a9cae78163.s1.eu.hivemq.cloud";
 const int mqtt_port = 8883;
 const char *mqtt_user = "Drone123";
 const char *mqtt_pass = "Spectr@123";
