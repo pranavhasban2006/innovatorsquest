@@ -1,7 +1,7 @@
 import math
 
 class GridMap:
-    def __init__(self, min_lat=34.09580, max_lat=34.09760, min_lng=-118.19276, max_lng=-118.19036, rows=40, cols=40):
+    def __init__(self, min_lat=26.91140, max_lat=26.91340, min_lng=75.78630, max_lng=75.78830, rows=40, cols=40):
         self.min_lat = min_lat
         self.max_lat = max_lat
         self.min_lng = min_lng

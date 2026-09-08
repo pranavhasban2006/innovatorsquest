@@ -28,10 +28,10 @@ function RecenterMap({ position }) {
   return null;
 }
 
-export default function GPSMap({ lat = 34.09670, lng = -118.19156, heading = 52, speed = 3.8, connected = true }) {
-  // Ensure valid coordinate fallbacks
-  const validLat = typeof lat === 'number' && !isNaN(lat) && lat !== 0 ? lat : 34.09670;
-  const validLng = typeof lng === 'number' && !isNaN(lng) && lng !== 0 ? lng : -118.19156;
+export default function GPSMap({ lat = 26.91240, lng = 75.78730, heading = 52, speed = 3.8, connected = true }) {
+  // Ensure valid coordinate fallbacks (Default: Jaipur, Rajasthan, India)
+  const validLat = typeof lat === 'number' && !isNaN(lat) && lat !== 0 ? lat : 26.91240;
+  const validLng = typeof lng === 'number' && !isNaN(lng) && lng !== 0 ? lng : 75.78730;
   const currentPos = useMemo(() => [validLat, validLng], [validLat, validLng]);
 
   const [trail, setTrail] = useState([]);
@@ -74,7 +74,7 @@ export default function GPSMap({ lat = 34.09670, lng = -118.19156, heading = 52,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           start: { lat: validLat, lng: validLng },
-          goal: { lat: 34.09740, lng: -118.19050 },
+          goal: { lat: 26.91310, lng: 75.78820 },
           threat_lat: threatLat,
           threat_lng: threatLng
         })
@@ -91,7 +91,7 @@ export default function GPSMap({ lat = 34.09670, lng = -118.19156, heading = 52,
       setPlannedPath([
         { lat: validLat, lng: validLng, cost: 1 },
         { lat: validLat + 0.0002, lng: validLng + 0.0004, cost: 1 },
-        { lat: 34.09740, lng: -118.19050, cost: 1 }
+        { lat: 26.91310, lng: 75.78820, cost: 1 }
       ]);
     } finally {
       setIsPlanning(false);
@@ -184,7 +184,7 @@ export default function GPSMap({ lat = 34.09670, lng = -118.19156, heading = 52,
          </div>
          <div className="bg-white/90 backdrop-blur border border-[#CBD5E1] px-3 py-1.5 shadow-sm">
            <div className="text-[8px] text-slate-600 tracking-wider font-semibold">LONGITUDE</div>
-           <div className="text-xs font-bold text-sky-900 tabular-nums">{validLng?.toFixed(5)}° W</div>
+           <div className="text-xs font-bold text-sky-900 tabular-nums">{Math.abs(validLng)?.toFixed(5)}° {validLng >= 0 ? 'E' : 'W'}</div>
          </div>
        </div>
 

@@ -34,8 +34,8 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
   const sideDist = sd.sideDist || 150;
   const obstacle = sd.obstacle || "CLEAR";
   const magDec = sd.magDeclination || 2.3;
-  const lat = sd.latitude || 34.09670;
-  const lng = sd.longitude || -118.19156;
+  const lat = (sd.latitude && sd.latitude !== 0) ? sd.latitude : 26.91240;
+  const lng = (sd.longitude && sd.longitude !== 0) ? sd.longitude : 75.78730;
   const speed = sd.speed || 3.8;
   const heading = sd.heading || 52;
   const threatScore = weapon ? Math.max(sd.threatScore || 92, 90) : (sd.threatScore || 86);

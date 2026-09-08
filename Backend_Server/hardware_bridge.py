@@ -11,7 +11,7 @@ platform.system = lambda: "Windows"
 platform.win32_ver = lambda *a, **k: ("10", "10.0.19041", "", "Multiprocessor Free")
 # -------------------------------
 
-import time, json, cv2, threading, requests, base64, ssl, queue, hashlib, secrets, random, os
+import time, json, cv2, threading, requests, base64, ssl, queue, hashlib, secrets, random, os, math
 import paho.mqtt.client as mqtt
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
@@ -34,6 +34,11 @@ PASSWORD = os.environ.get("MQTT_PASS", "Spectr@123")
 KEY = os.environ.get("AES_SECRET_KEY", "DRONE_SECURE_KEY").encode("utf-8")
 IV  = os.environ.get("AES_IV", "INITVECTOR123456").encode("utf-8")
 EXPRESS_API_URL = os.environ.get("EXPRESS_API_URL", "http://localhost:5000/api/data")
+
+# Live GPS Tracking State
+last_gps_lat = 0.0
+last_gps_lng = 0.0
+last_gps_time = 0.0
 
 # Blockchain Crypto Setup
 crypto_queue = queue.Queue()
@@ -342,10 +347,10 @@ def get_pathfind_route():
     try:
         from flask import request, jsonify
         data = request.json or {}
-        start_lat = data.get("start", {}).get("lat", 34.09670)
-        start_lng = data.get("start", {}).get("lng", -118.19156)
-        goal_lat = data.get("goal", {}).get("lat", 34.09720)
-        goal_lng = data.get("goal", {}).get("lng", -118.19080)
+        start_lat = data.get("start", {}).get("lat", 26.91240)
+        start_lng = data.get("start", {}).get("lng", 75.78730)
+        goal_lat = data.get("goal", {}).get("lat", 26.91310)
+        goal_lng = data.get("goal", {}).get("lng", 75.78820)
         
         g_map = GridMap()
         
@@ -463,14 +468,54 @@ def on_message(client, userdata, msg):
         move = "FORWARD"
 
     # --- ROUTE TO NODE.JS WEB DASHBOARD ---
+    global last_gps_lat, last_gps_lng, last_gps_time
     lat, lng = 0.0, 0.0
     
-    if "," in gps:
+    # 1. Flexible GPS Coordinate Extraction (Supports string, dict, list, or direct keys)
+    if "latitude" in sensor and "longitude" in sensor:
+        try: lat, lng = float(sensor["latitude"]), float(sensor["longitude"])
+        except: pass
+    elif "lat" in sensor and "lng" in sensor:
+        try: lat, lng = float(sensor["lat"]), float(sensor["lng"])
+        except: pass
+    elif isinstance(gps, str) and "," in gps:
         try:
             parts = gps.split(',')
-            lat, lng = float(parts[0]), float(parts[1])
-        except:
-            pass
+            lat, lng = float(parts[0].strip()), float(parts[1].strip())
+        except: pass
+    elif isinstance(gps, (list, tuple)) and len(gps) >= 2:
+        try: lat, lng = float(gps[0]), float(gps[1])
+        except: pass
+    elif isinstance(gps, dict):
+        try:
+            lat = float(gps.get("lat", gps.get("latitude", 0)))
+            lng = float(gps.get("lng", gps.get("longitude", 0)))
+        except: pass
+
+    # 2. Dynamic Speed & Bearing Kinematic Calculation from Consecutive Fixes
+    calc_speed = float(sensor.get("speed", 0))
+    calc_heading = int(sensor.get("heading", 0 if magnetic == 1 else 180))
+    now = time.time()
+
+    if lat != 0.0 and lng != 0.0:
+        if last_gps_lat != 0.0 and last_gps_lng != 0.0:
+            dt = max(now - last_gps_time, 0.1)
+            # Haversine distance in meters
+            dlat = math.radians(lat - last_gps_lat)
+            dlng = math.radians(lng - last_gps_lng)
+            a = math.sin(dlat/2)**2 + math.cos(math.radians(last_gps_lat)) * math.cos(math.radians(lat)) * math.sin(dlng/2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            dist_m = 6371000 * c
+            if calc_speed == 0 and dist_m > 0.1:
+                calc_speed = round(dist_m / dt, 1)
+            
+            # Bearing calculation in degrees (0-360)
+            if calc_heading == 0 or calc_heading == 180:
+                y = math.sin(dlng) * math.cos(math.radians(lat))
+                x = math.cos(math.radians(last_gps_lat)) * math.sin(math.radians(lat)) - math.sin(math.radians(last_gps_lat)) * math.cos(math.radians(lat)) * math.cos(dlng)
+                calc_heading = int((math.degrees(math.atan2(y, x)) + 360) % 360)
+
+        last_gps_lat, last_gps_lng, last_gps_time = lat, lng, now
 
     payload = {
         "threatLevel": level,
@@ -485,14 +530,14 @@ def on_message(client, userdata, msg):
         "latitude": lat,
         "longitude": lng,
         "threatScore": threat,
-        "magneticHeading": 0 if magnetic == 1 else 180,
+        "magneticHeading": calc_heading,
         "magnetic": magnetic,
         "frontDist": front,
         "sideDist": side,
         "obstacle": obstacle,
         "move": move,
-        "speed": 0,
-        "heading": 0
+        "speed": calc_speed,
+        "heading": calc_heading
     }
 
     try:
@@ -508,7 +553,7 @@ def on_message(client, userdata, msg):
     print("Tilt           :", tilt)
     print("Magnetic       :", "METAL DETECTED" if magnetic == 0 else "NORMAL")
     print("Obstacle       :", obstacle)
-    print("GPS            :", gps)
+    print("GPS            :", f"{lat}, {lng}" if (lat != 0 or lng != 0) else gps)
     print("Threat Score   :", threat)
     print("Threat Level   :", level)
     print("----------------------------------------")
