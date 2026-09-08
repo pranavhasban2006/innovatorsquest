@@ -37,7 +37,7 @@ export default function ThreatGraph({ history, connected = false, threatScore = 
 
       {/* Chart Canvas vs Empty State Area */}
       {!hasData ? (
-        <div className="flex-1 w-full flex flex-col items-center justify-center min-h-[180px] bg-slate-50 border border-dashed border-[#CBD5E1] p-4 text-center my-1">
+        <div className="flex-1 w-full flex flex-col items-center justify-center min-h-45 bg-slate-50 border border-dashed border-[#CBD5E1] p-4 text-center my-1">
           {connected ? (
             <div className="flex items-center gap-2 text-amber-700 font-bold text-xs tracking-wider uppercase">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
@@ -51,7 +51,7 @@ export default function ThreatGraph({ history, connected = false, threatScore = 
           )}
         </div>
       ) : (
-        <div className="flex-1 w-full -ml-3 min-h-[180px]">
+        <div className="flex-1 w-full -ml-3 min-h-45">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
               <defs>

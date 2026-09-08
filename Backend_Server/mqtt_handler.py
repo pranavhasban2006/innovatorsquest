@@ -50,7 +50,7 @@ def on_message(client, userdata, msg):
     except Exception as e:
         print(f"[MQTT Error] Parsing or sending failed: {e}")
 def start_mqtt_listener():
-    client = mqtt.Client()
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
 
     client.username_pw_set("spectr_user", "Strongpassword123")
     client.tls_set()

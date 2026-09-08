@@ -47,7 +47,7 @@ export default function HumanDetection({ detected, connected, cameraStatus, conf
         <span>AI VISION</span>
         {visual === 'detected' && boxCount > 0 && (
           <span className="text-[10px] font-mono text-orange-400/80 normal-case tracking-normal">
-            {boxCount} target{boxCount > 1 ? 's' : ''} · {Math.round((confidence || 0) * 100)}%
+            {boxCount} target{boxCount > 1 ? 's' : ''} · {Math.round(confidence || 0)}%
           </span>
         )}
       </div>
@@ -64,7 +64,7 @@ export default function HumanDetection({ detected, connected, cameraStatus, conf
 
       {/* Decorative backdrop */}
       {visual === 'detected' && (
-        <div className="absolute inset-0 bg-gradient-to-t from-orange-500/10 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-linear-to-t from-orange-500/10 to-transparent pointer-events-none" />
       )}
     </div>
   );

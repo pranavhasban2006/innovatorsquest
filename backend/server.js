@@ -4,6 +4,8 @@ const WebSocket = require('ws');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const fs = require('fs');
+const path = require('path');
 const { sendAlert } = require('../Cloud_Functions/alert_handler'); // Intrusion Email Protocol
 
 dotenv.config();
@@ -188,9 +190,33 @@ if (process.env.SIMULATE === 'true') {
 let realtimeThreatHistory = [];
 let breachData = { active: false, timer: null };
 let lastEmailTime = 0; // Prevent Gmail spam bans during constant intrusion
+let lastElevatedEmailTime = 0; // Separate rate limit for ELEVATED alerts
+
+// Pre-resolve log path once at startup
+const logDir = path.join(__dirname, '..', 'Logs');
+const logFilePath = path.join(logDir, 'spectr_blockchain_ledger.txt');
+if (!fs.existsSync(logDir)) {
+  fs.mkdirSync(logDir, { recursive: true });
+}
 
 app.post("/api/data", async (req, res) => {
   const data = req.body;
+
+  // Basic input validation — reject obviously malformed payloads
+  if (!data || typeof data !== 'object') {
+    return res.status(400).send("Invalid payload");
+  }
+
+  // Sanitize numeric fields — replace NaN/Infinity with 0
+  const numericFields = ['threatScore', 'temperature', 'humidity', 'pitch', 'roll',
+    'latitude', 'longitude', 'speed', 'heading', 'detectionConfidence',
+    'detectionCount', 'magneticHeading', 'frontDist', 'sideDist'];
+  for (const field of numericFields) {
+    if (data[field] !== undefined) {
+      const val = Number(data[field]);
+      data[field] = isFinite(val) ? val : 0;
+    }
+  }
 
   if (data.threatScore !== undefined) {
     realtimeThreatHistory.push(data.threatScore);
@@ -200,11 +226,14 @@ app.post("/api/data", async (req, res) => {
 
   console.log("Received from Python:", data.humanDetected, data.threatScore);
 
-  // Email Alert Threshold (Spam protected to 1 max per minute)
+  // Email Alert Threshold (Spam protected to 1 max per minute for HIGH, 5 min for ELEVATED)
   if (data.threatScore > 85 && (Date.now() - lastEmailTime) > 60000) {
       console.log("📧 SENDING EMAIL ALERT FOR HIGH INTRUSION!");
       sendAlert("🚨 HIGH THREAT INTRUSION DETECTED", `SPECTR YOLO system has detected a critical high-level threat in the perimeter.\n\nSeverity Score: ${data.threatScore.toFixed(1)}\nHuman Subject Verified: ${data.humanDetected}\nCoordinates: ${data.latitude}, ${data.longitude}`);
       lastEmailTime = Date.now();
+  } else if (data.threatScore > 35 && data.threatScore <= 85 && (Date.now() - lastElevatedEmailTime) > 300000) {
+      sendAlert("⚠️ ELEVATED THREAT DETECTED", `SPECTR system has detected elevated activity.\n\nSeverity Score: ${data.threatScore.toFixed(1)}\nCoordinates: ${data.latitude}, ${data.longitude}`);
+      lastElevatedEmailTime = Date.now();
   }
 
   // Breach Detection: Extreme Tilt + High Threat indicates drone capture!
@@ -247,15 +276,6 @@ app.post("/api/data", async (req, res) => {
     entry.save().catch(e => console.warn('[MongoDB Save Warning]:', e.message));
     
     // 💾 Physical File Logging for Live Demonstration
-    const fs = require('fs');
-    const path = require('path');
-    const logDir = path.join(__dirname, '..', 'Logs');
-    const logFilePath = path.join(logDir, 'spectr_blockchain_ledger.txt');
-    
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true });
-    }
-
     const logLine = `[${new Date().toLocaleString()}] LVL: ${data.security_level || 'SAFE'} | HASH: ${data.blockchain_hash} | SCORE: ${data.threatScore}\n`;
     fs.appendFile(logFilePath, logLine, (err) => {
         if (err) console.error("[Ledger Write Error]:", err.message);
@@ -271,6 +291,10 @@ app.get("/api/breach/status", (req, res) => {
 });
 
 app.post("/api/breach/approve", async (req, res) => {
+   const secret = process.env.BREACH_SECRET;
+   if (secret && req.headers['x-breach-token'] !== secret) {
+     return res.status(403).send("Unauthorized");
+   }
    if (!breachData.active) return res.status(400).send("No active breach");
    console.log("☠️ ADMIN APPROVED BREACH -> SECURE WIPE INITIATED!");
    clearTimeout(breachData.timer);

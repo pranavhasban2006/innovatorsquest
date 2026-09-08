@@ -44,8 +44,9 @@ export default function GPSMap({ lat = 34.09670, lng = -118.19156, heading = 52,
   const handlePlanRoute = async () => {
     setIsPlanning(true);
     setIsBlocked(false);
+    const pathfindUrl = import.meta.env.VITE_PATHFIND_URL || 'http://localhost:5001/api/pathfind';
     try {
-      const res = await fetch('http://localhost:5001/api/pathfind', {
+      const res = await fetch(pathfindUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -92,7 +93,7 @@ export default function GPSMap({ lat = 34.09670, lng = -118.19156, heading = 52,
     <div className="w-full h-full relative border border-[#CBD5E1] flex flex-col justify-between overflow-hidden font-['Share_Tech_Mono'] text-slate-900 bg-slate-900">
        
        {/* Top Header Controls Bar - z-[1000] */}
-       <div className="z-[1000] bg-white/95 backdrop-blur border-b border-[#CBD5E1] px-4 py-2 flex justify-between items-center text-[10px] pointer-events-auto">
+       <div className="z-1000 bg-white/95 backdrop-blur border-b border-[#CBD5E1] px-4 py-2 flex justify-between items-center text-[10px] pointer-events-auto">
           <div className="flex items-center gap-2 text-sky-800 font-['Rajdhani'] font-bold tracking-[0.18em] uppercase">
              <MapPin size={14} /> GPS TACTICAL LEAFLET VECTOR MAP
           </div>
@@ -110,7 +111,7 @@ export default function GPSMap({ lat = 34.09670, lng = -118.19156, heading = 52,
        </div>
 
        {/* Floating Telemetry HUD Badges - z-[1000] */}
-       <div className="absolute top-14 left-4 z-[1000] flex gap-2 pointer-events-none">
+       <div className="absolute top-14 left-4 z-1000 flex gap-2 pointer-events-none">
          <div className="bg-white/90 backdrop-blur border border-[#CBD5E1] px-3 py-1.5 shadow-sm">
            <div className="text-[8px] text-slate-600 tracking-wider font-semibold">LATITUDE</div>
            <div className="text-xs font-bold text-sky-900 tabular-nums">{lat?.toFixed(5)}° N</div>
@@ -123,12 +124,12 @@ export default function GPSMap({ lat = 34.09670, lng = -118.19156, heading = 52,
 
        {/* Blocked Path Danger Warning Banner */}
        {isBlocked && (
-         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[1000] bg-red-600 text-white font-bold px-4 py-2 text-xs tracking-widest uppercase border border-red-700 animate-bounce shadow-lg">
+         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-1000 bg-red-600 text-white font-bold px-4 py-2 text-xs tracking-widest uppercase border border-red-700 animate-bounce shadow-lg">
            ⚠️ NO SAFE PATH: HAZARD MATRIX BLOCKED
          </div>
        )}
 
-       <div className="absolute top-14 right-4 z-[1000] bg-white/90 backdrop-blur border border-[#CBD5E1] px-3 py-1.5 shadow-sm text-right flex gap-3 pointer-events-none">
+       <div className="absolute top-14 right-4 z-1000 bg-white/90 backdrop-blur border border-[#CBD5E1] px-3 py-1.5 shadow-sm text-right flex gap-3 pointer-events-none">
           <div>
             <div className="text-[8px] text-slate-600 tracking-wider font-semibold">GROUND SPEED</div>
             <div className="text-xs font-bold text-emerald-800 tabular-nums">{speed?.toFixed(1)} <span className="text-[9px] text-slate-500 font-normal">m/s</span></div>
@@ -173,7 +174,7 @@ export default function GPSMap({ lat = 34.09670, lng = -118.19156, heading = 52,
        </div>
 
        {/* Map Bottom Status Bar - z-[1000] */}
-       <div className="z-[1000] bg-white/95 border-t border-[#CBD5E1] px-4 py-1.5 flex justify-between items-center text-[9px] text-slate-600 font-semibold pointer-events-auto">
+       <div className="z-1000 bg-white/95 border-t border-[#CBD5E1] px-4 py-1.5 flex justify-between items-center text-[9px] text-slate-600 font-semibold pointer-events-auto">
           <span>OPERATIONAL ZONE: SECTOR ALPHA-01</span>
           <span>WAYPOINT: BASE ➔ CP-1</span>
        </div>

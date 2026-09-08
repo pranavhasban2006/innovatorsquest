@@ -203,7 +203,8 @@ def video_feed():
 
 @app_flask.route('/detection_status')
 def detection_status():
-    return detection_state
+    from flask import jsonify
+    return jsonify(detection_state)
 
 @app_flask.route('/')
 def index():
@@ -388,7 +389,7 @@ def on_message(client, userdata, msg):
     print("Threat Level   :", level)
     print("----------------------------------------")
 
-client = mqtt.Client()
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
 client.username_pw_set(USERNAME, PASSWORD)
 client.tls_set(cert_reqs=ssl.CERT_NONE)
 

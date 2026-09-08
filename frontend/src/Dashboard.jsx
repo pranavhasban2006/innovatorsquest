@@ -43,7 +43,7 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
   const isElevated = threatScore > 35 && !isBreach;
 
   return (
-    <div className={`min-h-screen max-w-[1920px] mx-auto p-3 lg:p-4 flex flex-col gap-3 tactical-grid-bg text-slate-900 relative transition-all duration-500 ${isBreach ? 'breach-alert-perimeter' : ''}`}>
+    <div className={`min-h-screen max-w-480 mx-auto p-3 lg:p-4 flex flex-col gap-3 tactical-grid-bg text-slate-900 relative transition-all duration-500 ${isBreach ? 'breach-alert-perimeter' : ''}`}>
       
       {/* Background State Glow Tint */}
       {isBreach && (
@@ -221,7 +221,7 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 z-10">
         
         {/* Hero Camera Feed (2 cols) */}
-        <div className="xl:col-span-2 h-[380px] md:h-[460px] tactical-panel border-[#CBD5E1] relative overflow-hidden flex flex-col bg-white">
+        <div className="xl:col-span-2 h-95 md:h-115 tactical-panel border-[#CBD5E1] relative overflow-hidden flex flex-col bg-white">
           <CamView humanDetected={human} connected={connected} cameraStatus={cameraStatus} confidence={detectionConfidence} />
         </div>
 
@@ -237,12 +237,12 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 z-10">
         
         {/* Threat Graph Timeline (2 cols) */}
-        <div className="xl:col-span-2 tactical-panel p-4 border-[#CBD5E1] bg-white min-h-[280px]">
+        <div className="xl:col-span-2 tactical-panel p-4 border-[#CBD5E1] bg-white min-h-70">
           <ThreatGraph history={threatHistory} connected={connected} threatScore={threatScore} />
         </div>
 
         {/* Tactical Command Log Feed (1 col) */}
-        <div className="xl:col-span-1 tactical-panel border-[#CBD5E1] bg-white flex flex-col h-[280px] overflow-hidden">
+        <div className="xl:col-span-1 tactical-panel border-[#CBD5E1] bg-white flex flex-col h-70 overflow-hidden">
           <div className="bg-slate-100 border-b border-[#CBD5E1] px-4 py-2.5 flex items-center justify-between">
             <div className="text-[11px] font-['Rajdhani'] font-bold tracking-[0.18em] text-slate-800 flex items-center gap-2 uppercase">
               <Database size={13} className="text-sky-700" /> SYSTEM COMMAND LOG
@@ -300,7 +300,7 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
       </div>
 
       {/* ======================= ROW 4: GPS LIGHT VECTOR MAP ======================= */}
-      <div className="h-[360px] tactical-panel border-[#CBD5E1] bg-white overflow-hidden z-10">
+      <div className="h-90 tactical-panel border-[#CBD5E1] bg-white overflow-hidden z-10">
         <GPSMap lat={lat} lng={lng} heading={heading} speed={speed} connected={connected} />
       </div>
 
@@ -360,14 +360,14 @@ function CamView({ humanDetected, connected, cameraStatus, confidence }) {
 
       {/* High Contrast Optical Reticle HUD */}
       <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center">
-        <div className={`w-[140px] h-[140px] border ${humanDetected ? 'border-red-600 shadow-[0_0_20px_rgba(220,38,38,0.5)]' : 'border-sky-400/80'} rounded-full flex items-center justify-center transition-all duration-300`}>
+        <div className={`w-35 h-35 border ${humanDetected ? 'border-red-600 shadow-[0_0_20px_rgba(220,38,38,0.5)]' : 'border-sky-400/80'} rounded-full flex items-center justify-center transition-all duration-300`}>
           
-          <div className={`w-[8px] h-[8px] ${humanDetected ? 'bg-red-600 shadow-[0_0_10px_#dc2626]' : 'bg-sky-500'} rounded-full`} />
+          <div className={`w-2 h-2 ${humanDetected ? 'bg-red-600 shadow-[0_0_10px_#dc2626]' : 'bg-sky-500'} rounded-full`} />
           
-          <div className="absolute -top-4 w-[1px] h-[16px] bg-sky-400" />
-          <div className="absolute -bottom-4 w-[1px] h-[16px] bg-sky-400" />
-          <div className="absolute -left-4 h-[1px] w-[16px] bg-sky-400" />
-          <div className="absolute -right-4 h-[1px] w-[16px] bg-sky-400" />
+          <div className="absolute -top-4 w-px h-4 bg-sky-400" />
+          <div className="absolute -bottom-4 w-px h-4 bg-sky-400" />
+          <div className="absolute -left-4 h-px w-4 bg-sky-400" />
+          <div className="absolute -right-4 h-px w-4 bg-sky-400" />
 
           <div className="absolute top-2 left-2 w-2 h-2 border-t border-l border-sky-400" />
           <div className="absolute top-2 right-2 w-2 h-2 border-t border-r border-sky-400" />
@@ -390,8 +390,8 @@ function CamView({ humanDetected, connected, cameraStatus, confidence }) {
           <div className="absolute inset-0 bg-[#F8FAFC] flex flex-col items-center justify-center tactical-grid-bg text-slate-900">
             <div className="relative w-48 h-48 border border-sky-400 rounded-full flex items-center justify-center mb-3 bg-white/50">
               <div className="absolute inset-0 rounded-full border border-sky-300 animate-ping opacity-30" />
-              <div className="w-full h-[1px] bg-sky-300 absolute" />
-              <div className="h-full w-[1px] bg-sky-300 absolute" />
+              <div className="w-full h-px bg-sky-300 absolute" />
+              <div className="h-full w-px bg-sky-300 absolute" />
               <div className="w-full h-full rounded-full border-t-2 border-sky-600 animate-radar-sweep origin-center" />
               
               {humanDetected && (

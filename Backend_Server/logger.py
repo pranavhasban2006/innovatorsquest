@@ -1,8 +1,10 @@
 # Backend_Server/logger.py
 
+import os
 from datetime import datetime
 
-LOG_FILE = "../Logs/forensics.log"
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_FILE = os.path.join(_THIS_DIR, '..', 'Logs', 'forensics.log')
 
 def log_event(event_type, message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
