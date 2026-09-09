@@ -1,146 +1,203 @@
-@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;0,700;1,400&family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @layer base {
   :root {
-    --bg-canvas: #F8FAFC;
-    --bg-surface: #FFFFFF;
-    --bg-surface-elevated: #F1F5F9;
-    --border-tactical: #CBD5E1;
-    --border-tactical-bright: #94A3B8;
+    --bg-canvas: #05070e;
+    --bg-surface: rgba(13, 18, 36, 0.75);
+    --bg-surface-elevated: rgba(21, 30, 56, 0.85);
+    --border-tactical: rgba(0, 240, 255, 0.2);
+    --border-tactical-bright: #00f0ff;
     
-    --color-atc-blue: #0284C7;
-    --color-emerald: #059669;
-    --color-amber: #D97706;
-    --color-crimson: #DC2626;
-    --color-gray: #475569;
-    --text-ink: #0F172A;
+    --color-neon-cyan: #00f0ff;
+    --color-neon-emerald: #00ff9d;
+    --color-neon-amber: #ffb700;
+    --color-neon-crimson: #ff0055;
     
     --font-mono: 'Share Tech Mono', monospace;
-    --font-header: 'Rajdhani', sans-serif;
+    --font-header: 'Orbitron', sans-serif;
+    --font-subheader: 'Rajdhani', sans-serif;
     --font-telemetry: 'Chakra Petch', sans-serif;
   }
 
   body {
     background-color: var(--bg-canvas);
-    color: var(--text-ink);
-    font-family: var(--font-telemetry);
+    color: #e2e8f0;
+    font-family: 'Inter', sans-serif;
     min-height: 100vh;
     overflow-x: hidden;
     margin: 0;
     font-feature-settings: "tnum" 1, "zero" 1;
   }
 
-  /* High contrast focus ring for accessibility */
   *:focus-visible {
-    outline: 2px solid var(--color-atc-blue) !important;
+    outline: 2px solid var(--color-neon-cyan) !important;
     outline-offset: 2px !important;
   }
 }
 
-/* Light Tactical Grid Overlay */
+/* Cyber Matrix / Grid Background */
 .tactical-grid-bg {
+  background-color: #05070e;
   background-image: 
-    linear-gradient(to right, rgba(148, 163, 184, 0.25) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.25) 1px, transparent 1px);
-  background-size: 32px 32px;
+    radial-gradient(circle at 50% 0%, rgba(0, 240, 255, 0.08) 0%, transparent 60%),
+    linear-gradient(to right, rgba(0, 240, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 240, 255, 0.05) 1px, transparent 1px);
+  background-size: 100% 100%, 36px 36px, 36px 36px;
 }
 
-/* High Legibility Panel Container (No Soft SaaS Shadow) */
-.tactical-panel {
-  position: relative;
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-tactical);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
-  font-feature-settings: "tnum" 1;
+/* Glassmorphism Cyber Card */
+.cyber-glass {
+  background: rgba(10, 15, 30, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 240, 255, 0.18);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Tactical Corner Brackets for Light Mode */
+.cyber-glass:hover {
+  border-color: rgba(0, 240, 255, 0.4);
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.15);
+}
+
+/* Glowing Neon Borders & Accent Sheens */
+.cyber-glow-cyan {
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.35);
+  border-color: rgba(0, 240, 255, 0.6) !important;
+}
+
+.cyber-glow-emerald {
+  box-shadow: 0 0 15px rgba(0, 255, 157, 0.35);
+  border-color: rgba(0, 255, 157, 0.6) !important;
+}
+
+.cyber-glow-crimson {
+  box-shadow: 0 0 20px rgba(255, 0, 85, 0.5);
+  border-color: rgba(255, 0, 85, 0.7) !important;
+}
+
+/* Corner Bracket Accents */
 .tactical-corner {
   position: relative;
 }
+
 .tactical-corner::before,
 .tactical-corner::after {
   content: '';
   position: absolute;
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   pointer-events: none;
   z-index: 10;
+  transition: all 0.3s ease;
 }
+
 .tactical-corner::before {
   top: -1px;
   left: -1px;
-  border-top: 2px solid var(--color-atc-blue);
-  border-left: 2px solid var(--color-atc-blue);
+  border-top: 2px solid var(--color-neon-cyan);
+  border-left: 2px solid var(--color-neon-cyan);
 }
+
 .tactical-corner::after {
   bottom: -1px;
   right: -1px;
-  border-bottom: 2px solid var(--color-atc-blue);
-  border-right: 2px solid var(--color-atc-blue);
+  border-bottom: 2px solid var(--color-neon-cyan);
+  border-right: 2px solid var(--color-neon-cyan);
 }
 
 .tactical-corner-danger::before {
-  border-top: 2px solid var(--color-crimson) !important;
-  border-left: 2px solid var(--color-crimson) !important;
+  border-top: 2px solid var(--color-neon-crimson) !important;
+  border-left: 2px solid var(--color-neon-crimson) !important;
 }
 .tactical-corner-danger::after {
-  border-bottom: 2px solid var(--color-crimson) !important;
-  border-right: 2px solid var(--color-crimson) !important;
+  border-bottom: 2px solid var(--color-neon-crimson) !important;
+  border-right: 2px solid var(--color-neon-crimson) !important;
 }
 
 .tactical-corner-amber::before {
-  border-top: 2px solid var(--color-amber) !important;
-  border-left: 2px solid var(--color-amber) !important;
+  border-top: 2px solid var(--color-neon-amber) !important;
+  border-left: 2px solid var(--color-neon-amber) !important;
 }
 .tactical-corner-amber::after {
-  border-bottom: 2px solid var(--color-amber) !important;
-  border-right: 2px solid var(--color-amber) !important;
+  border-bottom: 2px solid var(--color-neon-amber) !important;
+  border-right: 2px solid var(--color-neon-amber) !important;
 }
 
-/* Custom Scrollbars for Light Terminal Logs */
+/* Cyber Text Gradient Utilities */
+.text-gradient-cyan {
+  background: linear-gradient(135deg, #ffffff 0%, #00f0ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-crimson {
+  background: linear-gradient(135deg, #ffffff 0%, #ff0055 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-gold {
+  background: linear-gradient(135deg, #ffffff 0%, #ffb700 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Custom Cyber Scrollbars */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #F1F5F9;
-  border-left: 1px solid #CBD5E1;
+  background: #090d19;
+  border-left: 1px solid rgba(0, 240, 255, 0.1);
 }
 ::-webkit-scrollbar-thumb {
-  background: #94A3B8;
+  background: rgba(0, 240, 255, 0.25);
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #0284C7;
+  background: #00f0ff;
+  box-shadow: 0 0 10px #00f0ff;
 }
 
-/* Animations */
+/* Keyframe Animations */
 @keyframes HUD-sweep {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
 
+@keyframes cyber-pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
 @keyframes breach-room-flash {
-  0%, 100% { box-shadow: inset 0 0 25px rgba(220, 38, 38, 0.15); }
-  50% { box-shadow: inset 0 0 65px rgba(220, 38, 38, 0.35); }
+  0%, 100% { box-shadow: inset 0 0 30px rgba(255, 0, 85, 0.25); }
+  50% { box-shadow: inset 0 0 80px rgba(255, 0, 85, 0.6); }
 }
 
 .animate-radar-sweep {
-  animation: HUD-sweep 8s linear infinite;
+  animation: HUD-sweep 6s linear infinite;
+}
+
+.animate-cyber-pulse {
+  animation: cyber-pulse-ring 2s ease-in-out infinite;
 }
 
 .breach-alert-perimeter {
-  animation: breach-room-flash 1.5s ease-in-out infinite;
+  animation: breach-room-flash 1.2s ease-in-out infinite;
 }
 
-/* Diagonal Hazard Hatching for Offline State */
+/* Diagonal Hazard Hatching */
 .hazard-hatch-pattern {
   background-image: repeating-linear-gradient(
     45deg,
-    rgba(220, 38, 38, 0.05),
-    rgba(220, 38, 38, 0.05) 10px,
-    transparent 10px,
-    transparent 20px
+    rgba(255, 0, 85, 0.1),
+    rgba(255, 0, 85, 0.1) 12px,
+    transparent 12px,
+    transparent 24px
   );
 }

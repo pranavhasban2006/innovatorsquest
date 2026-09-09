@@ -4,6 +4,7 @@ import { Activity, Clock } from 'lucide-react';
 
 export default function ThreatGraph({ history, connected = false, threatScore = 0 }) {
   const isHigh = threatScore > 65;
+  const isElev = threatScore > 35 && !isHigh;
   const hasData = Boolean(history && history.length > 0);
 
   const chartData = hasData 
@@ -15,73 +16,85 @@ export default function ThreatGraph({ history, connected = false, threatScore = 
       }))
     : [];
 
-  const strokeColor = isHigh ? '#DC2626' : '#0284C7';
-  const fillGradientId = isHigh ? 'threatGradientLightHigh' : 'threatGradientLightNominal';
+  const strokeColor = isHigh ? '#ff0055' : isElev ? '#ffb700' : '#00f0ff';
+  const fillGradientId = isHigh ? 'threatGradientHigh' : isElev ? 'threatGradientElevated' : 'threatGradientNominal';
 
   return (
     <div className="w-full h-full flex flex-col justify-between font-['Share_Tech_Mono']">
       
       {/* Chart Header */}
-      <div className="flex justify-between items-center mb-2 border-b border-[#E2E8F0] pb-2">
-        <div className="text-[11px] font-['Rajdhani'] font-bold tracking-[0.18em] text-slate-800 uppercase flex items-center gap-1.5">
-          <Activity size={14} className={isHigh ? "text-red-600 animate-pulse" : "text-sky-700"} />
-          REALTIME THREAT ANALYTICS (60S WINDOW)
+      <div className="flex justify-between items-center mb-2 border-b border-cyan-500/20 pb-2">
+        <div className="text-[11px] font-['Orbitron'] font-bold tracking-[0.18em] text-slate-200 uppercase flex items-center gap-2">
+          <Activity size={16} className={isHigh ? "text-[#ff0055] animate-bounce" : "text-[#00f0ff] animate-pulse"} />
+          <span>REALTIME THREAT ANALYTICS (60S WINDOW)</span>
         </div>
-        <div className="flex items-center gap-3 text-[10px] text-slate-600 font-semibold">
-          <span className="flex items-center gap-1"><Clock size={11} /> 1Hz SAMPLE</span>
-          <span className={`px-1.5 py-0.2 border ${isHigh ? 'border-red-500 text-red-800 bg-red-100' : 'border-sky-300 text-sky-900 bg-sky-50'}`}>
-            CURRENT: {threatScore}%
+        <div className="flex items-center gap-3 text-[10px] text-slate-400 font-semibold">
+          <span className="flex items-center gap-1"><Clock size={12} /> 1Hz SAMPLE</span>
+          <span 
+            className="px-2 py-0.5 border rounded-xs font-['Orbitron'] font-bold tracking-wider"
+            style={{ 
+              borderColor: strokeColor, 
+              color: strokeColor, 
+              backgroundColor: `${strokeColor}15`,
+              boxShadow: `0 0 10px ${strokeColor}40`
+            }}
+          >
+            CURRENT: {Math.round(threatScore)}%
           </span>
         </div>
       </div>
 
       {/* Chart Canvas vs Empty State Area */}
       {!hasData ? (
-        <div className="flex-1 w-full flex flex-col items-center justify-center min-h-45 bg-slate-50 border border-dashed border-[#CBD5E1] p-4 text-center my-1">
+        <div className="flex-1 w-full flex flex-col items-center justify-center min-h-48 bg-slate-950/60 border border-dashed border-cyan-500/20 p-4 text-center my-1 rounded-lg">
           {connected ? (
-            <div className="flex items-center gap-2 text-amber-700 font-bold text-xs tracking-wider uppercase">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-              AWAITING TELEMETRY...
+            <div className="flex items-center gap-2 text-[#ffb700] font-bold text-xs tracking-wider uppercase font-['Orbitron']">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#ffb700] animate-ping" />
+              AWAITING TELEMETRY STREAM...
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-slate-500 font-bold text-xs tracking-wider uppercase">
-              <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+            <div className="flex items-center gap-2 text-slate-500 font-bold text-xs tracking-wider uppercase font-['Orbitron']">
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-600" />
               NO BACKEND CONNECTION
             </div>
           )}
         </div>
       ) : (
-        <div className="flex-1 w-full -ml-3 min-h-45">
+        <div className="flex-1 w-full -ml-3 min-h-48">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
               <defs>
-                <linearGradient id="threatGradientLightNominal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#0284C7" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#0284C7" stopOpacity={0.0} />
+                <linearGradient id="threatGradientNominal" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#00f0ff" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#00f0ff" stopOpacity={0.0} />
                 </linearGradient>
-                <linearGradient id="threatGradientLightHigh" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#DC2626" stopOpacity={0.45} />
-                  <stop offset="95%" stopColor="#DC2626" stopOpacity={0.0} />
+                <linearGradient id="threatGradientElevated" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ffb700" stopOpacity={0.45} />
+                  <stop offset="95%" stopColor="#ffb700" stopOpacity={0.0} />
+                </linearGradient>
+                <linearGradient id="threatGradientHigh" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ff0055" stopOpacity={0.55} />
+                  <stop offset="95%" stopColor="#ff0055" stopOpacity={0.0} />
                 </linearGradient>
               </defs>
               
-              <CartesianGrid stroke="#E2E8F0" strokeDasharray="3 3" vertical={false} opacity={0.8} />
+              <CartesianGrid stroke="rgba(0, 240, 255, 0.08)" strokeDasharray="3 3" vertical={false} />
               
               <XAxis 
                 dataKey="timeStr" 
-                tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Share Tech Mono', fontWeight: 600 }} 
-                axisLine={{ stroke: '#CBD5E1' }} 
+                tick={{ fill: '#94a3b8', fontSize: 9, fontFamily: 'Share Tech Mono', fontWeight: 600 }} 
+                axisLine={{ stroke: 'rgba(0, 240, 255, 0.2)' }} 
                 tickLine={false} 
                 interval={14}
               />
               
               <YAxis 
                 domain={[0, 100]} 
-                stroke="#475569" 
+                stroke="#94a3b8" 
                 fontSize={9} 
                 fontFamily="Share Tech Mono"
                 fontWeight={600}
-                axisLine={{ stroke: '#CBD5E1' }} 
+                axisLine={{ stroke: 'rgba(0, 240, 255, 0.2)' }} 
                 tickLine={false} 
                 tickMargin={5}
                 ticks={[0, 25, 50, 75, 100]}
@@ -89,13 +102,13 @@ export default function ThreatGraph({ history, connected = false, threatScore = 
               
               <Tooltip 
                 contentStyle={{ 
-                  backgroundColor: '#FFFFFF', 
-                  border: '1px solid #CBD5E1', 
-                  borderRadius: '0px', 
-                  color: '#0F172A', 
+                  backgroundColor: 'rgba(10, 15, 30, 0.95)', 
+                  border: `1px solid ${strokeColor}`, 
+                  borderRadius: '4px', 
+                  color: '#f8fafc', 
                   fontSize: '11px',
                   fontFamily: 'Share Tech Mono',
-                  boxShadow: '0 4px 12px rgba(15, 23, 42, 0.1)'
+                  boxShadow: `0 0 15px ${strokeColor}40`
                 }}
                 labelFormatter={(label) => `TIME: ${label}`}
                 formatter={(value) => [`THREAT: ${value}%`, 'SCORE']}

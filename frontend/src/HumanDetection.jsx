@@ -1,10 +1,6 @@
 import React from 'react';
-import { User, ShieldCheck, VideoOff, WifiOff } from 'lucide-react';
+import { User, ShieldCheck, VideoOff, WifiOff, Eye } from 'lucide-react';
 
-// `cameraStatus` comes straight from hardware_bridge.py's detection_state
-// ("CONNECTED" / "NOT CONNECTED"), so we can tell "confirmed clear" apart
-// from "camera isn't even feeding us frames" instead of defaulting both
-// to a reassuring green "AREA CLEAR" — same class of fix as ThreatGraph.
 export default function HumanDetection({ detected, connected, cameraStatus, confidence, boxCount }) {
   const cameraLive = cameraStatus === 'CONNECTED';
 
@@ -15,56 +11,70 @@ export default function HumanDetection({ detected, connected, cameraStatus, conf
 
   const CONFIG = {
     offline: {
-      icon: <WifiOff size={48} className="text-slate-500" />,
-      label: 'NO BACKEND CONNECTION',
-      box: 'bg-slate-500/10 border-slate-500/20',
-      text: 'text-slate-500',
+      icon: <WifiOff size={32} className="text-slate-500" />,
+      label: 'NO BACKEND LINK',
+      box: 'bg-slate-900/50 border-slate-700/40 text-slate-500',
+      badge: 'border-slate-700 text-slate-500 bg-slate-900/50',
     },
     'no-camera': {
-      icon: <VideoOff size={48} className="text-amber-400 animate-pulse" />,
-      label: 'CAMERA OFFLINE',
-      box: 'bg-amber-500/10 border-amber-500/30',
-      text: 'text-amber-400',
+      icon: <VideoOff size={32} className="text-amber-400 animate-pulse" />,
+      label: 'CAMERA FEED OFFLINE',
+      box: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+      badge: 'border-amber-500/40 text-amber-400 bg-amber-500/10',
     },
     clear: {
-      icon: <ShieldCheck size={48} className="text-cyan-400" />,
-      label: 'AREA CLEAR',
-      box: 'bg-cyan-500/10 border-cyan-500/20 shadow-[0_0_20px_rgba(34,211,238,0.1)]',
-      text: 'text-cyan-400',
+      icon: <ShieldCheck size={32} className="text-[#00ff9d]" />,
+      label: 'NO HUMAN DETECTED',
+      box: 'bg-[#00ff9d]/10 border-[#00ff9d]/30 text-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.15)]',
+      badge: 'border-[#00ff9d]/40 text-[#00ff9d] bg-[#00ff9d]/10',
     },
     detected: {
-      icon: <User size={48} className="text-orange-400 animate-pulse" />,
-      label: 'HUMAN TARGET DETECTED',
-      box: 'bg-orange-500/20 border-orange-500/40 shadow-[0_0_40px_rgba(249,115,22,0.3)]',
-      text: 'text-orange-400',
+      icon: <User size={32} className="text-[#ffb700] animate-bounce" />,
+      label: 'HUMAN TARGET TRACKED',
+      box: 'bg-[#ffb700]/20 border-[#ffb700]/60 text-[#ffb700] shadow-[0_0_25px_rgba(255,183,0,0.35)] animate-cyber-pulse',
+      badge: 'border-[#ffb700] text-[#ffb700] bg-[#ffb700]/20 font-bold',
     },
   }[visual];
 
   return (
-    <div className="p-6 rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl h-full flex flex-col shadow-[0_8px_32px_rgba(0,0,0,0.3)] relative overflow-hidden">
-
-      <div className="text-xs font-semibold tracking-widest text-slate-400 mb-6 z-10 flex items-center justify-between">
-        <span>AI VISION</span>
-        {visual === 'detected' && boxCount > 0 && (
-          <span className="text-[10px] font-mono text-orange-400/80 normal-case tracking-normal">
-            {boxCount} target{boxCount > 1 ? 's' : ''} · {Math.round(confidence || 0)}%
+    <div className={`cyber-glass p-4 rounded-xl border ${detected ? 'border-[#ffb700] cyber-glow-amber' : 'border-cyan-500/20'} flex flex-col justify-between relative overflow-hidden transition-all duration-300`}>
+      
+      {/* Header */}
+      <div className="text-[10px] font-['Orbitron'] font-bold tracking-[0.18em] text-slate-300 z-10 flex items-center justify-between uppercase">
+        <span className="flex items-center gap-1.5 text-cyan-400">
+          <Eye size={14} className={detected ? "text-[#ffb700] animate-pulse" : "text-cyan-400"} /> AI HUMAN VISION
+        </span>
+        {visual === 'detected' && (
+          <span className="text-[9px] font-['Share_Tech_Mono'] px-2 py-0.5 border rounded-xs tracking-wider uppercase font-bold text-[#ffb700] border-[#ffb700]/50 bg-[#ffb700]/10">
+            {boxCount || 1} TARGET • {Math.round(confidence || 88)}%
           </span>
         )}
       </div>
 
-      <div className="flex-1 flex flex-col justify-center items-center z-10">
-        <div className={`w-24 h-24 rounded-md flex items-center justify-center mb-6 transition-all duration-500 ease-in-out border ${CONFIG.box}`}>
+      {/* Main Body */}
+      <div className="flex-1 flex flex-col justify-center items-center z-10 py-3">
+        <div className={`w-16 h-16 rounded-lg flex items-center justify-center mb-3 transition-all duration-500 border ${CONFIG.box}`}>
           {CONFIG.icon}
         </div>
 
-        <div className={`text-xl font-bold tracking-widest ${CONFIG.text}`}>
+        <div className={`text-xs font-['Orbitron'] font-bold tracking-[0.18em] uppercase ${CONFIG.badge.includes('ffb700') ? 'text-[#ffb700]' : CONFIG.badge.includes('00ff9d') ? 'text-[#00ff9d]' : 'text-slate-400'}`}>
           {CONFIG.label}
         </div>
+
+        {/* Confidence Meter Bar */}
+        {visual === 'detected' && (
+          <div className="w-full mt-3 bg-slate-950/80 border border-[#ffb700]/30 h-1.5 rounded-full overflow-hidden p-0.5">
+            <div 
+              className="bg-[#ffb700] h-full rounded-full transition-all duration-500" 
+              style={{ width: `${Math.round(confidence || 88)}%`, boxShadow: '0 0 8px #ffb700' }} 
+            />
+          </div>
+        )}
       </div>
 
       {/* Decorative backdrop */}
       {visual === 'detected' && (
-        <div className="absolute inset-0 bg-linear-to-t from-orange-500/10 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#ffb700]/10 to-transparent pointer-events-none" />
       )}
     </div>
   );
