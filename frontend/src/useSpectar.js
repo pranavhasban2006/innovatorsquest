@@ -8,6 +8,7 @@ export function useSpectar() {
   const [threatHistory, setThreatHistory] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [connected, setConnected] = useState(false);
+  const [breachState, setBreachState] = useState({ active: false, secondsRemaining: 0, reason: '', state: 'IDLE' });
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
 
@@ -19,6 +20,52 @@ export function useSpectar() {
       setThreatHistory(scores);
     } catch {
       console.warn('History fetch failed, using simulated history');
+    }
+  }, []);
+
+  const fetchBreachStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/breach/status`);
+      const data = await res.json();
+      if (data.active) {
+        setBreachState({
+          active: true,
+          secondsRemaining: data.secondsRemaining,
+          reason: data.reason,
+          state: 'ACTIVATED'
+        });
+      }
+    } catch (e) {}
+  }, []);
+
+  const cancelBreach = useCallback(async () => {
+    try {
+      await fetch(`${API_URL}/breach/cancel`, { method: 'POST' });
+    } catch (e) {
+      console.error('Failed to cancel breach:', e);
+    }
+  }, []);
+
+  const approveBreach = useCallback(async () => {
+    try {
+      await fetch(`${API_URL}/breach/approve`, {
+        method: 'POST',
+        headers: { 'x-breach-token': 'change_me_to_a_strong_random_string' }
+      });
+    } catch (e) {
+      console.error('Failed to approve breach:', e);
+    }
+  }, []);
+
+  const triggerBreach = useCallback(async (reason = "MANUAL_UI_TRIGGER") => {
+    try {
+      await fetch(`${API_URL}/breach/trigger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
+      });
+    } catch (e) {
+      console.error('Failed to trigger breach:', e);
     }
   }, []);
 
@@ -47,6 +94,22 @@ export function useSpectar() {
               });
             } else if (msg.type === 'ALERT') {
               setAlerts(prev => [msg.data, ...prev].slice(0, 10));
+            } else if (msg.type === 'BREACH_STATE') {
+              const bData = msg.data;
+              if (bData.state === 'ACTIVATED' || bData.state === 'COUNTDOWN') {
+                setBreachState({
+                  active: true,
+                  secondsRemaining: bData.secondsRemaining,
+                  reason: bData.reason || 'DRONE BREACH',
+                  state: bData.state
+                });
+              } else if (bData.state === 'CANCELLED') {
+                setBreachState({ active: false, secondsRemaining: 0, reason: '', state: 'CANCELLED' });
+              } else if (bData.state === 'EXECUTED') {
+                setBreachState({ active: false, secondsRemaining: 0, reason: '', state: 'EXECUTED' });
+                setThreatHistory([]);
+                setSensorData(null);
+              }
             }
           } catch { /* ignore parse errors */ }
         };
@@ -69,6 +132,7 @@ export function useSpectar() {
     }
 
     fetchHistory();
+    fetchBreachStatus();
     connect();
 
     return () => {
@@ -76,7 +140,7 @@ export function useSpectar() {
       if (wsRef.current) wsRef.current.close();
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
     };
-  }, [fetchHistory]);
+  }, [fetchHistory, fetchBreachStatus]);
 
-  return { sensorData, threatHistory, alerts, connected };
+  return { sensorData, threatHistory, alerts, connected, breachState, cancelBreach, approveBreach, triggerBreach };
 }

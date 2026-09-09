@@ -6,16 +6,51 @@ import ThreatGraph from './ThreatGraph';
 import GPSMap from './GPSMap';
 import { 
   ShieldAlert, Activity, Thermometer, Compass, Navigation, Radar, 
-  AlertTriangle, ShieldCheck, Database, Radio, Crosshair
+  AlertTriangle, ShieldCheck, Database, Radio, Crosshair, Mail, Send
 } from 'lucide-react';
 
-export default function Dashboard({ sensorData, threatHistory, alerts, connected }) {
+export default function Dashboard({ 
+  sensorData, threatHistory, alerts, connected,
+  breachState, cancelBreach, approveBreach, triggerBreach 
+}) {
   const [time, setTime] = useState(new Date());
+  const [emailTesting, setEmailTesting] = useState(false);
+  const [emailToast, setEmailToast] = useState(null);
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  const handleTestEmail = async () => {
+    setEmailTesting(true);
+    setEmailToast({ type: 'info', message: 'Sending test alert email...' });
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/alerts/test-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: "🚨 TEST ALERT: SPECTR Security Protocol Verification",
+          message: "This is an automated test email sent from the SPECTR Tactical Command Center to verify email alert system functionality."
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEmailToast({ 
+          type: 'success', 
+          message: `✅ Email Dispatched! (${data.details?.provider || 'Success'}) ${data.details?.etherealUrl ? `[View Sandbox: ${data.details.etherealUrl}]` : ''}` 
+        });
+      } else {
+        setEmailToast({ type: 'error', message: `❌ Email Failed: ${data.error}` });
+      }
+    } catch (err) {
+      setEmailToast({ type: 'error', message: `❌ Connection Error: ${err.message}` });
+    } finally {
+      setEmailTesting(false);
+      setTimeout(() => setEmailToast(null), 10000);
+    }
+  };
 
   const sd = sensorData || {};
   const human = sd.humanDetected || false;
@@ -42,7 +77,7 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
   const secLevel = sd.security_level || "GHOST";
   const bHash = sd.blockchain_hash ? sd.blockchain_hash.substring(0, 18) + '...' : "0x7F9A...SYS_OK";
 
-  const isBreach = threatScore > 65 || human || weapon;
+  const isBreach = threatScore > 65 || human || weapon || breachState?.active;
   const isElevated = threatScore > 35 && !isBreach;
 
   return (
@@ -56,6 +91,50 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
       ) : isElevated ? (
         <div className="fixed inset-0 bg-amber-500/5 pointer-events-none z-0 transition-opacity duration-500" />
       ) : null}
+
+      {/* ======================= CRITICAL BREACH & PURGE BANNER ======================= */}
+      {breachState?.active && (
+        <div className="bg-red-950 border-2 border-red-500 rounded-xl p-4 shadow-2xl shadow-red-900/50 animate-pulse text-white flex flex-col md:flex-row items-center justify-between gap-4 z-50">
+          <div className="flex items-center gap-4">
+            <div className="bg-red-600 p-3 rounded-full animate-bounce">
+              <ShieldAlert className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold tracking-wider text-red-400">🚨 CRITICAL BREACH PROTOCOL ACTIVATED</h2>
+                <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded font-mono font-bold animate-pulse">AUTO-PURGE IN PROGRESS</span>
+              </div>
+              <p className="text-sm text-red-200 mt-1 font-mono">
+                REASON: <span className="text-white font-bold">{breachState.reason || "DRONE CAPTURE / SYSTEM INTRUSION"}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="text-center px-4 py-2 bg-red-900/80 border border-red-500 rounded-lg">
+              <div className="text-3xl font-mono font-black text-red-400">{breachState.secondsRemaining || 30}s</div>
+              <div className="text-[10px] text-red-200 tracking-widest uppercase">AUTO PURGE TIMER</div>
+            </div>
+
+            <div className="flex gap-2">
+              <button 
+                onClick={cancelBreach}
+                className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-bold text-sm border border-slate-600 transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                ABORT WIPE
+              </button>
+              <button 
+                onClick={approveBreach}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-red-600/30 transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <AlertTriangle className="w-4 h-4 text-white" />
+                PURGE NOW
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ======================= DAYLIGHT CONTROL HEADER ======================= */}
       <header className={`tactical-panel ${weapon ? 'tactical-corner-danger border-red-700 bg-red-100/80 animate-pulse' : isBreach ? 'tactical-corner-danger border-red-500 bg-red-50/40' : isElevated ? 'tactical-corner-amber border-amber-500 bg-amber-50/30' : 'tactical-corner border-[#CBD5E1] bg-white'} p-3 lg:px-5 flex flex-col md:flex-row justify-between items-center gap-3 z-10`}>
@@ -82,7 +161,11 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
 
         {/* Center Threat State Banner */}
         <div className="flex items-center justify-center">
-          {weapon ? (
+          {breachState?.active ? (
+            <div className="flex items-center gap-2 border border-red-700 bg-red-700 text-white px-4 py-1.5 text-xs font-['Rajdhani'] font-bold tracking-[0.2em] animate-pulse shadow-md">
+              <ShieldAlert size={16} className="animate-bounce" /> 🚨 BREACH IN PROGRESS // PURGE IN {breachState.secondsRemaining}s
+            </div>
+          ) : weapon ? (
             <div className="flex items-center gap-2 border border-red-700 bg-red-700 text-white px-4 py-1.5 text-xs font-['Rajdhani'] font-bold tracking-[0.2em] animate-bounce shadow-md">
               <Crosshair size={16} className="animate-spin" /> [!] WEAPON DETECTED // CRITICAL BREACH ESCALATION ({threatScore}%)
             </div>
@@ -101,23 +184,40 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
           )}
         </div>
 
-        {/* Right Info & Timestamp */}
-        <div className="flex items-center gap-4 text-right">
+        {/* Right Info & Controls */}
+        <div className="flex items-center gap-3 text-right">
           
           {/* Connection Status Badge */}
           <div className={`flex items-center gap-2 px-2.5 py-1 border text-[10px] font-['Share_Tech_Mono'] tracking-wider uppercase font-bold ${connected ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-red-500 bg-red-50 text-red-700 animate-pulse'}`}>
             <Radio size={12} className={connected ? "animate-pulse" : ""} />
-            {connected ? 'WS LINK: ONLINE (12ms)' : 'WS LINK: OFFLINE // RECONNECTING'}
+            {connected ? 'WS LINK: ONLINE' : 'WS LINK: OFFLINE'}
           </div>
 
-          {/* Crypto / Security level */}
-          <div className="hidden xl:flex flex-col text-right font-['Share_Tech_Mono'] text-[10px]">
-            <span className="text-slate-600 font-medium">HASH: <span className="text-sky-700 font-bold">{bHash}</span></span>
-            <span className="text-slate-600 font-medium">SEC: <span className="text-emerald-700 font-bold">{secLevel}</span></span>
-          </div>
+          {/* Test Email Button */}
+          <button 
+            onClick={handleTestEmail}
+            disabled={emailTesting}
+            title="Dispatch Test Tactical Email Alert"
+            className="bg-sky-800 hover:bg-sky-900 text-white text-[10px] font-['Share_Tech_Mono'] font-bold px-2.5 py-1 rounded border border-sky-950 tracking-wider uppercase cursor-pointer flex items-center gap-1 shadow-sm transition-all disabled:opacity-50"
+          >
+            <Mail size={12} className={emailTesting ? "animate-spin" : ""} />
+            {emailTesting ? "SENDING..." : "TEST EMAIL"}
+          </button>
+
+          {/* Emergency Trigger Button */}
+          {!breachState?.active && (
+            <button 
+              onClick={() => triggerBreach("COMMAND_MANUAL_EMERGENCY")}
+              title="Initiate Emergency Security Purge Protocol"
+              className="bg-red-700 hover:bg-red-800 text-white text-[10px] font-['Share_Tech_Mono'] font-bold px-2.5 py-1 rounded border border-red-900 tracking-wider uppercase cursor-pointer flex items-center gap-1 shadow-sm transition-all"
+            >
+              <AlertTriangle size={12} />
+              EMERGENCY PURGE
+            </button>
+          )}
 
           {/* Clock */}
-          <div className="flex flex-col text-right border-l border-[#CBD5E1] pl-4 font-['Share_Tech_Mono']">
+          <div className="flex flex-col text-right border-l border-[#CBD5E1] pl-3 font-['Share_Tech_Mono']">
             <span className="text-slate-900 font-bold text-base tracking-widest tabular-nums">{time.toLocaleTimeString()}</span>
             <span className="text-slate-600 text-[10px] tracking-wider uppercase font-semibold">{time.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}</span>
           </div>
@@ -125,6 +225,21 @@ export default function Dashboard({ sensorData, threatHistory, alerts, connected
         </div>
 
       </header>
+
+      {/* Email Dispatch Toast Banner */}
+      {emailToast && (
+        <div className={`p-3 border rounded-lg font-['Share_Tech_Mono'] text-xs font-bold flex items-center justify-between z-40 transition-all ${
+          emailToast.type === 'success' ? 'bg-emerald-950 border-emerald-500 text-emerald-300' :
+          emailToast.type === 'error' ? 'bg-red-950 border-red-500 text-red-300' :
+          'bg-sky-950 border-sky-500 text-sky-300'
+        }`}>
+          <div className="flex items-center gap-2 overflow-x-auto">
+            <Mail size={16} />
+            <span>{emailToast.message}</span>
+          </div>
+          <button onClick={() => setEmailToast(null)} className="text-slate-400 hover:text-white text-xs ml-2 cursor-pointer font-bold">✕</button>
+        </div>
+      )}
 
       {/* ======================= ROW 1: DAYLIGHT METRICS STRIP ======================= */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 z-10">

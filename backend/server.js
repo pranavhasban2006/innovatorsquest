@@ -6,7 +6,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const fs = require('fs');
 const path = require('path');
-const { sendAlert } = require('../Cloud_Functions/alert_handler'); // Intrusion Email Protocol
+const { sendAlert, getEmailStatus } = require('../Cloud_Functions/alert_handler'); // Intrusion Email Protocol
 
 dotenv.config();
 
@@ -17,11 +17,13 @@ const wss = new WebSocket.Server({ server });
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection
+// MongoDB Connection (Handles offline state gracefully)
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/spectr';
-mongoose.connect(MONGO_URI)
+mongoose.set('bufferCommands', false);
+mongoose.connection.on('error', err => console.warn('[MongoDB Offline Warning]:', err.message));
+mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 3000 })
   .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB error:', err));
+  .catch(err => console.warn('MongoDB connection deferred (Offline mode active)'));
 
 // ─── Schemas ───────────────────────────────────────────────────────────────
 const SensorDataSchema = new mongoose.Schema({
@@ -108,6 +110,41 @@ app.post('/api/alerts', async (req, res) => {
   }
 });
 
+app.get('/api/alerts/email-config', (req, res) => {
+  try {
+    const status = getEmailStatus();
+    res.json(status);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/alerts/test-email', async (req, res) => {
+  try {
+    const subject = req.body?.subject || "🚨 TEST ALERT: SPECTR Security Protocol Verification";
+    const message = req.body?.message || "This is an automated test email sent from the SPECTR Tactical Command Center to verify SMTP connectivity and alert functionality.";
+    const result = await sendAlert(subject, message, { severity: "INFO" });
+    
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const alertEntry = new Alert({
+          timestamp: new Date(),
+          type: "SYSTEM_EMAIL_TEST",
+          message: `Test email sent to ${result.recipients}`,
+          severity: "INFO"
+        });
+        alertEntry.save().catch(() => {});
+      } catch (err) {}
+    }
+
+    broadcastToClients({ type: 'ALERT', data: { timestamp: new Date(), severity: 'INFO', message: `Test email dispatched to ${result.recipients}` } });
+
+    res.json({ success: true, message: `Email dispatched successfully to ${result.recipients}`, details: result });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message || "Failed to send email alert" });
+  }
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', uptime: process.uptime(), dbState: mongoose.connection.readyState });
 });
@@ -188,7 +225,7 @@ if (process.env.SIMULATE === 'true') {
 // 🛑 REAL DATA MODE: Native Routing of Payload ────────────────────────────
 
 let realtimeThreatHistory = [];
-let breachData = { active: false, timer: null };
+let breachData = { active: false, timer: null, interval: null, secondsRemaining: 0, reason: '' };
 let lastEmailTime = 0; // Prevent Gmail spam bans during constant intrusion
 let lastElevatedEmailTime = 0; // Separate rate limit for ELEVATED alerts
 
@@ -197,6 +234,77 @@ const logDir = path.join(__dirname, '..', 'Logs');
 const logFilePath = path.join(logDir, 'spectr_blockchain_ledger.txt');
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
+}
+
+async function executeSecureWipe(reason = "AUTO_DELETE_TIMEOUT") {
+  console.log(`☠️ SECURE WIPE EXECUTING (${reason}) -> WIPING DATABASE & LEDGER!`);
+  
+  if (breachData.timer) clearTimeout(breachData.timer);
+  if (breachData.interval) clearInterval(breachData.interval);
+  breachData.timer = null;
+  breachData.interval = null;
+
+  try {
+    await SensorData.deleteMany({});
+  } catch (err) {
+    console.error("[Wipe Error MongoDB]:", err.message);
+  }
+
+  try {
+    fs.writeFileSync(logFilePath, `[${new Date().toLocaleString()}] ⚠️ DATA WIPED BY SPECTR SECURE BREACH PROTOCOL (${reason})\n`);
+  } catch (err) {
+    console.error("[Wipe Error Ledger File]:", err.message);
+  }
+
+  breachData.active = false;
+  breachData.secondsRemaining = 0;
+
+  broadcastToClients({
+    type: 'BREACH_STATE',
+    data: { state: 'EXECUTED', message: `DATA WIPED: ${reason}` }
+  });
+
+  broadcastToClients({
+    type: 'ALERT',
+    data: { timestamp: new Date(), severity: 'CRITICAL', message: `DATA WIPED: SPECTR AUTO-DELETE PROTOCOL EXECUTED (${reason}).` }
+  });
+}
+
+function initiateBreachProtocol(reason = "DRONE CAPTURE SUSPECTED") {
+  if (breachData.active) return;
+
+  breachData.active = true;
+  breachData.secondsRemaining = 30;
+  breachData.reason = reason;
+
+  console.log(`🚨 BREACH PROTOCOL ACTIVATED: ${reason}`);
+
+  broadcastToClients({
+    type: 'ALERT',
+    data: { timestamp: new Date(), severity: 'CRITICAL', message: `BREACH PROTOCOL: ${reason}! PURGE IN 30s!` }
+  });
+
+  broadcastToClients({
+    type: 'BREACH_STATE',
+    data: { state: 'ACTIVATED', secondsRemaining: 30, reason }
+  });
+
+  sendAlert("CRITICAL SECURITY BREACH INITIATED", `SPECTR System Security Warning:\nReason: ${reason}\nHard drive and database purge in 30 seconds unless aborted via mission control dashboard.`);
+
+  breachData.interval = setInterval(() => {
+    if (!breachData.active) return;
+    breachData.secondsRemaining -= 1;
+
+    broadcastToClients({
+      type: 'BREACH_STATE',
+      data: { state: 'COUNTDOWN', secondsRemaining: breachData.secondsRemaining, reason }
+    });
+
+    if (breachData.secondsRemaining <= 0) {
+      clearInterval(breachData.interval);
+      executeSecureWipe("COUNTDOWN_EXPIRED");
+    }
+  }, 1000);
 }
 
 app.post("/api/data", async (req, res) => {
@@ -224,7 +332,7 @@ app.post("/api/data", async (req, res) => {
     data.threatHistory = [...realtimeThreatHistory];
   }
 
-  console.log("Received from Python:", data.humanDetected, data.threatScore);
+  console.log("Received telemetry payload:", "humanDetected=", data.humanDetected, "threatScore=", data.threatScore);
 
   // Email Alert Threshold (Spam protected to 1 max per minute for HIGH, 5 min for ELEVATED)
   if (data.threatScore > 85 && (Date.now() - lastEmailTime) > 60000) {
@@ -236,22 +344,9 @@ app.post("/api/data", async (req, res) => {
       lastElevatedEmailTime = Date.now();
   }
 
-  // Breach Detection: Extreme Tilt + High Threat indicates drone capture!
+  // Breach Detection: Extreme Tilt + High Threat indicates physical capture or hostile interception!
   if (!breachData.active && (Math.abs(data.pitch) > 60 || Math.abs(data.roll) > 60) && data.threatScore > 65) {
-      breachData.active = true;
-      console.log("🚨 PROBABLE DRONE CAPTURE DETECTED. INITIATING BREACH PROTOCOL!");
-      broadcastToClients({ type: 'ALERT', data: { timestamp: new Date(), severity: 'CRITICAL', message: `BREACH PROTOCOL: DRONE CAPTURED! AWAITING ADMIN AUTH FOR WIPE!` }});
-      
-      sendAlert("CRITICAL HARDWARE CAPTURE DETECTED", "SPECTR Unit 7 has detected kinematic conditions matching physical capture. Breach protocol initiated. Hard drive wipe in 30 seconds unless aborted via dashboard.");
-      
-      breachData.timer = setTimeout(async () => {
-         if (breachData.active) {
-            console.log("☠️ BREACH TIMEOUT REACHED -> WIPING DB SECRETS!");
-            await SensorData.deleteMany({});
-            broadcastToClients({ type: 'ALERT', data: { timestamp: new Date(), severity: 'CRITICAL', message: `DATA WIPED: SPECTR AUTO-DELETE PROTOCOL EXECUTED.` }});
-            breachData.active = false;
-         }
-      }, 30000); // 30 second timer
+      initiateBreachProtocol("DRONE KINEMATIC CAPTURE (EXTREME TILT + HIGH THREAT)");
   }
 
   // Dynamic System Log Injection based on AI/Sensors
@@ -287,7 +382,17 @@ app.post("/api/data", async (req, res) => {
 });
 
 app.get("/api/breach/status", (req, res) => {
-   res.json({ active: breachData.active });
+   res.json({
+     active: breachData.active,
+     secondsRemaining: breachData.secondsRemaining,
+     reason: breachData.reason
+   });
+});
+
+app.post("/api/breach/trigger", (req, res) => {
+   const reason = req.body?.reason || "MANUAL ADMIN TRIGGER";
+   initiateBreachProtocol(reason);
+   res.json({ status: "BREACH PROTOCOL INITIATED", reason });
 });
 
 app.post("/api/breach/approve", async (req, res) => {
@@ -296,18 +401,22 @@ app.post("/api/breach/approve", async (req, res) => {
      return res.status(403).send("Unauthorized");
    }
    if (!breachData.active) return res.status(400).send("No active breach");
-   console.log("☠️ ADMIN APPROVED BREACH -> SECURE WIPE INITIATED!");
-   clearTimeout(breachData.timer);
-   await SensorData.deleteMany({});
-   broadcastToClients({ type: 'ALERT', data: { timestamp: new Date(), severity: 'CRITICAL', message: `DATA WIPED: ADMIN EXECUTED SECURE WIPE.` }});
-   breachData.active = false;
-   res.send("BREACH APPROVED");
+   await executeSecureWipe("ADMIN_MANUAL_PURGE");
+   res.send("BREACH APPROVED AND DATA WIPED");
 });
 
 app.post("/api/breach/cancel", async (req, res) => {
    if (!breachData.active) return res.status(400).send("No active breach");
-   clearTimeout(breachData.timer);
+   if (breachData.interval) clearInterval(breachData.interval);
+   if (breachData.timer) clearTimeout(breachData.timer);
    breachData.active = false;
+   breachData.secondsRemaining = 0;
+   
+   broadcastToClients({
+     type: 'BREACH_STATE',
+     data: { state: 'CANCELLED', message: 'ABORT ORDER EXECUTED BY COMMAND' }
+   });
+
    broadcastToClients({ type: 'ALERT', data: { timestamp: new Date(), severity: 'INFO', message: `BREACH CANCELLED: Stand down order given.` }});
    res.send("BREACH CANCELLED");
 });

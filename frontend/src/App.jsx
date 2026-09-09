@@ -25,7 +25,7 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function App() {
-  const { sensorData, threatHistory, alerts, connected } = useSpectar();
+  const { sensorData, threatHistory, alerts, connected, breachState, cancelBreach, approveBreach, triggerBreach } = useSpectar();
 
   return (
     <ErrorBoundary>
@@ -35,6 +35,10 @@ export default function App() {
         threatHistory={threatHistory}
         alerts={alerts}
         connected={connected}
+        breachState={breachState}
+        cancelBreach={cancelBreach}
+        approveBreach={approveBreach}
+        triggerBreach={triggerBreach}
       />
     </ErrorBoundary>
   );

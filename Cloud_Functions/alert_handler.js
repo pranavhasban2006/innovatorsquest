@@ -1,38 +1,204 @@
-// process.env mapping loaded securely by backend/server.js
-const nodemailer = require("nodemailer");
+const path = require("path");
+const fs = require("fs");
 
-function sendAlert(subject, message) {
-  const EMAIL = process.env.ALERT_EMAIL;
-  const PASSWORD = process.env.ALERT_PASSWORD;
-  const RECIPIENTS = process.env.ALERT_RECIPIENTS || EMAIL;
-
-  if (!EMAIL || !PASSWORD) {
-    console.log("⚠️ EMAIL ALERTS DISABLED. Add ALERT_EMAIL and ALERT_PASSWORD to backend/.env");
-    return;
-  }
-
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: EMAIL,
-      pass: PASSWORD,
-    },
-  });
-
-  const mailOptions = {
-    from: EMAIL,
-    to: RECIPIENTS,
-    subject: `[SPECTR SYSTEM] ${subject}`,
-    text: message,
-  };
-
-  transporter.sendMail(mailOptions, (err, info) => {
-    if (err) {
-      console.log("❌ Failed to send alert email:", err.message);
-    } else {
-      console.log(`✅ Intrusion Alert Email Sent Successfully to ${RECIPIENTS}!`);
-    }
-  });
+let dotenv;
+try {
+  dotenv = require("dotenv");
+} catch (e) {
+  try {
+    dotenv = require(path.join(__dirname, "..", "backend", "node_modules", "dotenv"));
+  } catch (err) {}
 }
 
-module.exports = { sendAlert };
+let nodemailer;
+try {
+  nodemailer = require("nodemailer");
+} catch (e) {
+  try {
+    nodemailer = require(path.join(__dirname, "..", "backend", "node_modules", "nodemailer"));
+  } catch (err) {}
+}
+
+// Load environment configuration (.env in backend/ or pass.env in Cloud_Functions/)
+const backendEnv = path.join(__dirname, "..", "backend", ".env");
+const passEnv = path.join(__dirname, "pass.env");
+
+if (dotenv) {
+  if (fs.existsSync(backendEnv)) {
+    dotenv.config({ path: backendEnv });
+  }
+  if (fs.existsSync(passEnv)) {
+    dotenv.config({ path: passEnv });
+  }
+}
+
+/**
+ * Returns current email configuration details
+ */
+function getEmailStatus() {
+  const EMAIL = process.env.ALERT_EMAIL || process.env.EMAIL || "";
+  const PASSWORD = (process.env.ALERT_PASSWORD || process.env.PASSWORD || "").replace(/\s+/g, "");
+  const RECIPIENTS = process.env.ALERT_RECIPIENTS || process.env.RECIPIENTS || EMAIL;
+
+  return {
+    configured: Boolean(EMAIL && PASSWORD),
+    sender: EMAIL ? EMAIL : "Not configured",
+    recipients: RECIPIENTS ? RECIPIENTS.split(",").map(e => e.trim()) : [],
+    hasNodemailer: Boolean(nodemailer),
+    smtpHost: process.env.SMTP_HOST || "Gmail Service",
+    allowFallback: process.env.ALLOW_ETHEREAL_FALLBACK !== "false"
+  };
+}
+
+/**
+ * Generates Tactical HTML Email Body
+ */
+function generateHtmlTemplate(subject, message, options = {}) {
+  const timestamp = new Date().toLocaleString();
+  const severity = options.severity || (subject.toLowerCase().includes("critical") || subject.toLowerCase().includes("breach") ? "CRITICAL" : "WARNING");
+  const badgeColor = severity === "CRITICAL" ? "#ef4444" : "#f59e0b";
+
+  return `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0b0f19; color: #e2e8f0; margin: 0; padding: 20px; }
+      .container { max-width: 600px; margin: 0 auto; background-color: #111827; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+      .header { background-color: #1e293b; padding: 20px; text-align: center; border-bottom: 2px solid #3b82f6; }
+      .title { color: #f8fafc; font-size: 20px; font-weight: bold; margin: 0; letter-spacing: 1px; }
+      .badge { display: inline-block; padding: 4px 12px; font-size: 12px; font-weight: bold; border-radius: 9999px; background-color: ${badgeColor}; color: #ffffff; margin-top: 8px; text-transform: uppercase; }
+      .content { padding: 25px; line-height: 1.6; }
+      .message-box { background-color: #1f2937; border-left: 4px solid ${badgeColor}; padding: 15px; border-radius: 4px; margin-bottom: 20px; white-space: pre-line; color: #f3f4f6; }
+      .meta-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+      .meta-table td { padding: 8px 12px; border-bottom: 1px solid #374151; color: #9ca3af; }
+      .meta-table tr td:first-child { font-weight: bold; color: #d1d5db; width: 35%; }
+      .footer { background-color: #0f172a; padding: 15px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #1e293b; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div class="title">🛡️ SPECTR TACTICAL SYSTEM ALERT</div>
+        <div class="badge">${severity} LEVEL ALERT</div>
+      </div>
+      <div class="content">
+        <h3 style="color: #f3f4f6; margin-top: 0;">${subject}</h3>
+        <div class="message-box">${message}</div>
+        <table class="meta-table">
+          <tr><td>Timestamp:</td><td>${timestamp}</td></tr>
+          <tr><td>System Mode:</td><td>OPERATIONAL MONITORING</td></tr>
+          <tr><td>Target Action:</td><td>IMMEDIATE RECONNAISSANCE ADVISED</td></tr>
+        </table>
+      </div>
+      <div class="footer">
+        Automated Security Notification generated by SPECTR Drone Defense System.<br>
+        Do not reply directly to this email.
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+}
+
+/**
+ * Sends Email Alert with real SMTP + Ethereal sandbox fallback
+ */
+async function sendAlert(subject, message, options = {}) {
+  if (!nodemailer) {
+    throw new Error("❌ nodemailer package unavailable.");
+  }
+
+  const EMAIL = process.env.ALERT_EMAIL || process.env.EMAIL;
+  const RAW_PASSWORD = process.env.ALERT_PASSWORD || process.env.PASSWORD;
+  const RECIPIENTS = process.env.ALERT_RECIPIENTS || process.env.RECIPIENTS || EMAIL;
+  const allowFallback = process.env.ALLOW_ETHEREAL_FALLBACK !== "false";
+
+  // Try real transport if configured
+  if (EMAIL && RAW_PASSWORD) {
+    const PASSWORD = RAW_PASSWORD.replace(/\s+/g, "");
+
+    let transportConfig;
+    if (process.env.SMTP_HOST) {
+      transportConfig = {
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT) || 587,
+        secure: process.env.SMTP_SECURE === "true",
+        auth: { user: EMAIL, pass: PASSWORD },
+      };
+    } else {
+      transportConfig = {
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: { user: EMAIL, pass: PASSWORD },
+      };
+    }
+
+    const transporter = nodemailer.createTransport(transportConfig);
+    const mailOptions = {
+      from: `"SPECTR Tactical Defense" <${EMAIL}>`,
+      to: RECIPIENTS,
+      subject: `[SPECTR SYSTEM] ${subject}`,
+      text: message,
+      html: generateHtmlTemplate(subject, message, options)
+    };
+
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`✅ Intrusion Alert Email Sent Successfully to ${RECIPIENTS}! (${info.response})`);
+      return {
+        success: true,
+        provider: "Primary SMTP",
+        recipients: RECIPIENTS,
+        response: info.response,
+        messageId: info.messageId
+      };
+    } catch (err) {
+      console.warn(`⚠️ Primary SMTP send failed (${err.message}).`);
+      if (!allowFallback) {
+        throw err;
+      }
+      console.log("🔄 Falling back to Ethereal Sandbox Email Service...");
+    }
+  } else if (!allowFallback) {
+    throw new Error("⚠️ EMAIL ALERTS DISABLED. Add ALERT_EMAIL and ALERT_PASSWORD to backend/.env");
+  }
+
+  // Ethereal Fallback Sandbox
+  try {
+    const testAccount = await nodemailer.createTestAccount();
+    const sandboxTransporter = nodemailer.createTransport({
+      host: testAccount.smtp.host,
+      port: testAccount.smtp.port,
+      secure: testAccount.smtp.secure,
+      auth: { user: testAccount.user, pass: testAccount.pass },
+    });
+
+    const sandboxMailOptions = {
+      from: `"SPECTR Tactical Defense Sandbox" <${testAccount.user}>`,
+      to: RECIPIENTS || testAccount.user,
+      subject: `[SPECTR SYSTEM - SANDBOX] ${subject}`,
+      text: message,
+      html: generateHtmlTemplate(subject, message, options)
+    };
+
+    const info = await sandboxTransporter.sendMail(sandboxMailOptions);
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    console.log(`✅ Sandbox Alert Email Dispatched! Preview URL: ${previewUrl}`);
+    
+    return {
+      success: true,
+      provider: "Ethereal Sandbox",
+      recipients: RECIPIENTS || testAccount.user,
+      etherealUrl: previewUrl,
+      messageId: info.messageId,
+      notice: "Dispatched via Ethereal Sandbox. Update Gmail App Password in backend/.env for direct inbox delivery."
+    };
+  } catch (fallbackErr) {
+    throw new Error(`Email dispatch failed: ${fallbackErr.message}`);
+  }
+}
+
+module.exports = { sendAlert, getEmailStatus };
