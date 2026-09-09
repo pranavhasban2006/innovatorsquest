@@ -183,7 +183,7 @@ def detection_thread():
                 frame_copy = latest_frame.copy()
 
                 # 1. Run Human Detection (COCO class 0: person)
-                results = model.predict(frame_copy, imgsz=320, conf=0.45, classes=[0], verbose=False)
+                results = model.predict(frame_copy, imgsz=416, conf=0.35, iou=0.45, classes=[0], verbose=False)
                 boxes = results[0].boxes
                 
                 human_found = len(boxes) > 0
@@ -194,10 +194,10 @@ def detection_thread():
                     for box in boxes:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
                         conf = float(box.conf[0]) * 100
-                        cv2.rectangle(frame_copy, (x1, y1), (x2, y2), (255, 200, 0), 2) # Cyan/Blue
-                        label = f"HUMAN {conf:.1f}%"
+                        cv2.rectangle(frame_copy, (x1, y1), (x2, y2), (255, 240, 0), 2)
+                        label = f"HUMAN LOCK {conf:.1f}%"
                         (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                        cv2.rectangle(frame_copy, (x1, y1 - 20), (x1 + w + 6, y1), (255, 200, 0), -1)
+                        cv2.rectangle(frame_copy, (x1, y1 - 20), (x1 + w + 6, y1), (255, 240, 0), -1)
                         cv2.putText(frame_copy, label, (x1 + 3, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
 
                 weapon_found = False
@@ -205,7 +205,7 @@ def detection_thread():
 
                 # 2. Run Knife / Blade Detection using standard COCO model (class 43: knife, class 76: scissors)
                 try:
-                    knife_results = model.predict(frame_copy, imgsz=320, conf=0.35, classes=[43, 76], verbose=False)
+                    knife_results = model.predict(frame_copy, imgsz=416, conf=0.25, iou=0.45, classes=[43, 76], verbose=False)
                     k_boxes = knife_results[0].boxes
                     if len(k_boxes) > 0:
                         weapon_found = True
@@ -223,10 +223,10 @@ def detection_thread():
                 except Exception:
                     pass
 
-                # 3. Run Gun / Firearm Detection using fine-tuned model (conf >= 0.35 for responsive detection)
+                # 3. Run Gun / Firearm Detection using fine-tuned model (conf >= 0.25 for responsive detection)
                 if weapon_model is not None:
                     try:
-                        w_results = weapon_model.predict(frame_copy, imgsz=320, conf=0.35, verbose=False)
+                        w_results = weapon_model.predict(frame_copy, imgsz=416, conf=0.25, iou=0.45, verbose=False)
                         w_boxes = w_results[0].boxes
                         if len(w_boxes) > 0:
                             g_conf = float(max(b.conf[0] for b in w_boxes)) * 100
@@ -237,7 +237,7 @@ def detection_thread():
                                 wx1, wy1, wx2, wy2 = map(int, w_box.xyxy[0])
                                 wconf = float(w_box.conf[0]) * 100
                                 cls_id = int(w_box.cls[0])
-                                cls_name = weapon_model.names.get(cls_id, "GUN").upper()
+                                cls_name = weapon_model.names.get(cls_id, "WEAPON").upper()
                                 
                                 cv2.rectangle(frame_copy, (wx1, wy1), (wx2, wy2), (0, 0, 255), 3) # Bright Red
                                 wlabel = f"⚠️ {cls_name} {wconf:.1f}%"
