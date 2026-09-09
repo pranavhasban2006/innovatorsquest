@@ -99,7 +99,7 @@ latest_frame = None
 camera_online = False
 cap = None
 
-CAMERA_URL_ENV = os.environ.get("CAMERA_URL", "http://192.168.137.115/stream")
+CAMERA_URL_ENV = os.environ.get("CAMERA_URL", "http://192.168.137.127/stream")
 video_source = CAMERA_URL_ENV
 
 detection_state = {
@@ -115,7 +115,7 @@ import numpy as np
 
 def cam_thread():
     global latest_frame, camera_online
-    target = os.environ.get("CAMERA_URL", "http://192.168.137.115/stream")
+    target = os.environ.get("CAMERA_URL", "http://192.168.137.127/stream")
     print(f"[SYSTEM] 🎯 Connecting to ESP32 Stream: {target}", flush=True)
 
     while True:
@@ -138,7 +138,6 @@ def cam_thread():
                             latest_frame = frame
                             camera_online = True
             else:
-                camera_online = False
                 time.sleep(1)
         except Exception as e:
             camera_online = False
@@ -394,21 +393,52 @@ def run_flask():
 threading.Thread(target=run_flask, daemon=True).start()
 
 def decrypt_packet(enc):
+    if not enc:
+        return None
+    
+    # 1. Try Direct Raw JSON parsing first (if unencrypted JSON published)
     try:
-        enc = enc.strip()
-        if len(enc) % 4:
-            enc += '=' * (4 - len(enc) % 4)
-        raw = base64.b64decode(enc)
+        raw_str = enc.strip()
+        if raw_str.startswith("{") and raw_str.endswith("}"):
+            return raw_str
+    except Exception:
+        pass
+
+    # 2. Try AES CBC Decryption
+    try:
+        enc_clean = enc.strip()
+        if len(enc_clean) % 4:
+            enc_clean += '=' * (4 - len(enc_clean) % 4)
+        raw = base64.b64decode(enc_clean)
         cipher = AES.new(KEY, AES.MODE_CBC, IV)
-        return unpad(cipher.decrypt(raw), 16).decode(errors='ignore')
-    except:
+        decrypted = cipher.decrypt(raw)
+        
+        # PKCS7 Unpadding
+        pad_len = decrypted[-1]
+        if isinstance(pad_len, int) and 1 <= pad_len <= 16:
+            decrypted = decrypted[:-pad_len]
+        return decrypted.decode('utf-8', errors='ignore')
+    except Exception as e:
+        # 3. Fallback attempt with manual regex find
+        try:
+            raw = base64.b64decode(enc)
+            cipher = AES.new(KEY, AES.MODE_CBC, IV)
+            txt = cipher.decrypt(raw).decode('utf-8', errors='ignore')
+            s = txt.find('{')
+            e = txt.rfind('}')
+            if s != -1 and e != -1:
+                return txt[s:e+1]
+        except Exception:
+            pass
         return None
 
 def on_message(client, userdata, msg):
-    print(f"[CLOUD INBOUND] Received encrypted packet of length {len(msg.payload)}")
-    decoded = decrypt_packet(msg.payload.decode())
+    payload_str = msg.payload.decode(errors='ignore')
+    print(f"[CLOUD INBOUND] Received MQTT message of length {len(payload_str)}")
+    
+    decoded = decrypt_packet(payload_str)
     if not decoded:
-        print("[CLOUD INBOUND] ❌ Decryption Failed (Is the DRONE_SECURE_KEY matching?)")
+        print(f"[CLOUD INBOUND] ❌ Decryption / Parsing Failed. Raw: {payload_str[:50]}...")
         return
 
     start = decoded.find('{')
@@ -420,16 +450,19 @@ def on_message(client, userdata, msg):
 
     try:
         sensor = json.loads(clean)
-    except:
+    except Exception as e:
+        print(f"[CLOUD INBOUND] JSON Parse Error: {e}")
         return
 
-    temp = float(sensor.get("temp", 30))
-    humidity = float(sensor.get("humidity", 50))
-    tilt = float(sensor.get("tilt", 0))
-    magnetic = int(sensor.get("magnetic", 1))
-    front = float(sensor.get("frontDist", 150))
-    side = float(sensor.get("sideDist", 150))
-    gps = sensor.get("gps", "0,0")
+    print(f"[SYSTEM ✅] Parsed Telemetry Payload: {sensor}")
+
+    temp = float(sensor.get("temp", sensor.get("temperature", 30)))
+    humidity = float(sensor.get("humidity", sensor.get("hum", 50)))
+    tilt = float(sensor.get("tilt", sensor.get("pitch", 0)))
+    magnetic = int(sensor.get("magnetic", sensor.get("mag", 1)))
+    front = float(sensor.get("frontDist", sensor.get("front", sensor.get("distance", 150))))
+    side = float(sensor.get("sideDist", sensor.get("side", 150)))
+    gps = sensor.get("gps", "26.91240,75.78730")
 
     intrusion = detection_state["humanDetected"]
     weapon = detection_state.get("weaponDetected", False)
